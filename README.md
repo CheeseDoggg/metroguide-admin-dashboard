@@ -2,6 +2,11 @@
 
 A comprehensive web-based admin dashboard for managing incident reports, vehicle reports, and emergency SOS alerts with real-time tracking and mapping capabilities.
 
+## 🌐 **LIVE DEMO**
+**🔗 [Access METROGUIDE Dashboard](https://metro-guide-6b52a.web.app)**
+
+*Your fully functional admin dashboard is now live on Firebase Hosting!*
+
 ## 🚀 Features
 
 ### 📊 **Incident Reports Management**
