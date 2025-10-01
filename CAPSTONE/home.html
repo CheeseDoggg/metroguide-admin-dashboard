@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>METROGUIDE | Admin Dashboard</title>
+  <style>
+    /* Dynamic description column */
+    td.description-cell {
+  max-width: 250px;
+  max-height: 60px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  white-space: pre-wrap;
+  word-break: break-word;
+  cursor: pointer;
+  user-select: text;
+    }
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background: #fdfdfd;
+      color: #333;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+    header {
+      background-color: rgba(197, 99, 69, 0.9);
+      padding: 20px 40px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 28px;
+      color: #ffffff;
+    }
+    .logout-button {
+      padding: 10px 20px;
+      background-color: #ffffff;
+      color: rgba(197, 99, 69, 0.9);
+      border: none;
+      border-radius: 5px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    nav {
+      margin-bottom: 20px;
+    }
+    .tab-button {
+      margin-right: 10px;
+      padding: 10px 20px;
+      border: none;
+      background-color: rgba(197, 99, 69, 0.8);
+      color: white;
+      font-weight: bold;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    .tab-button.active {
+      background-color: #bf360c;
+    }
+    .container {
+      flex: 1;
+      padding: 40px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+      font-size: 15px;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 12px 10px;
+      text-align: left;
+    }
+    th {
+      background-color: rgba(197, 99, 69, 0.92);
+      color: white;
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+    #reportsTable tr:nth-child(even) {
+      background-color: #f7e7e2;
+    }
+    #reportsTable tr:nth-child(odd) {
+      background-color: #fff;
+    }
+    #reportsTable tr:hover {
+      background-color: #ffe0d1;
+      transition: background 0.2s;
+    }
+    .btn {
+      padding: 7px 14px;
+      margin: 0 3px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-weight: bold;
+      font-size: 14px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.07);
+      transition: background 0.2s, color 0.2s;
+    }
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    .btn-verify {
+      background-color: #4caf50;
+      color: white;
+    }
+    .btn-verify:hover {
+      background-color: #388e3c;
+    }
+    .btn-reject {
+      background-color: #f44336;
+      color: white;
+    }
+    .btn-reject:hover {
+      background-color: #c62828;
+    }
+    .btn {
+      padding: 5px 10px;
+      margin-right: 5px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    .btn-verify {
+      background-color: #4caf50;
+      color: white;
+    }
+    .btn-reject {
+      background-color: #f44336;
+      color: white;
+    }
+    footer {
+      text-align: center;
+      padding: 20px;
+      background-color: rgba(255, 255, 255, 0.9);
+      font-size: 14px;
+    }
+    
+    /* Image display styles */
+    .report-image {
+      max-width: 80px;
+      max-height: 60px;
+      object-fit: cover;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: transform 0.2s;
+      border: 1px solid #ddd;
+    }
+    
+    .report-image:hover {
+      transform: scale(1.1);
+      border-color: rgba(197, 99, 69, 0.5);
+    }
+    
+    /* Image modal styles */
+    .image-modal {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.8);
+      animation: fadeIn 0.3s;
+    }
+    
+    .image-modal-content {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      max-width: 90%;
+      max-height: 90%;
+    }
+    
+    .image-modal img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      border-radius: 8px;
+    }
+    
+    .image-modal-close {
+      position: absolute;
+      top: 20px;
+      right: 30px;
+      color: white;
+      font-size: 40px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: color 0.2s;
+    }
+    
+    .image-modal-close:hover {
+      color: #f44336;
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    
+    /* Map modal styles */
+    .map-modal {
+      display: none;
+      position: fixed;
+      z-index: 1001;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.8);
+      animation: fadeIn 0.3s;
+    }
+    
+    .map-modal-content {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 90%;
+      height: 80%;
+      max-width: 800px;
+      max-height: 600px;
+      background: white;
+      border-radius: 10px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    }
+    
+    .map-modal-header {
+      background-color: rgba(197, 99, 69, 0.9);
+      color: white;
+      padding: 15px 20px;
+      border-radius: 10px 10px 0 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .map-modal-close {
+      color: white;
+      font-size: 24px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: color 0.2s;
+      background: none;
+      border: none;
+    }
+    
+    .map-modal-close:hover {
+      color: #f44336;
+    }
+    
+    .map-container {
+      width: 100%;
+      height: calc(100% - 60px);
+      border-radius: 0 0 10px 10px;
+    }
+    
+    .btn-view {
+      background-color: #2196f3;
+      color: white;
+    }
+    
+    .btn-view:hover {
+      background-color: #1976d2;
+    }
+  </style>
+</head>
+<body>
+  <header>
+  <h1>METROGUIDE Admin <span id="adminBadge" style="display:none; background:#4caf50; color:#fff; font-size:12px; padding:3px 8px; border-radius:12px; vertical-align:middle;">ADMIN</span></h1>
+    <button class="logout-button" id="logoutBtn">Logout</button>
+  </header>
+
+  <div class="container">
+    <nav>
+  <button id="tabReports" class="tab-button active">Incident Reports</button>
+  <button id="tabVehicle" class="tab-button">Vehicle Reports</button>
+  <button id="tabHistory" class="tab-button">History</button>
+  <button id="tabSOS" class="tab-button">SOS Report</button>
+  <button id="tabUsers" class="tab-button">Users & Stats</button>
+    </nav>
+
+    <!-- Incident Reports Tab -->
+    <div id="incidentReportsSection">
+      <h2>Incident Reports</h2>
+      <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center; font-size:13px;">
+        <input id="incidentSearch" type="text" placeholder="Search description/email/category" style="padding:6px 8px; min-width:240px;" />
+        <select id="incidentCategoryFilter" style="padding:6px 8px;">
+          <option value="">All Categories</option>
+        </select>
+        <span id="incidentStatus" style="color:#666;">Loading…</span>
+      </div>
+      <table>
+        <tbody id="reportsTable"></tbody>
+      </table>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px; font-size:13px;">
+        <div>
+          <button class="btn" id="incPrevPage">Prev</button>
+          <button class="btn" id="incNextPage">Next</button>
+          <span id="incPageInfo"></span>
+        </div>
+        <label>Page size:
+          <select id="incPageSize" style="padding:4px 6px;">
+            <option value="25">25</option>
+            <option value="50" selected>50</option>
+            <option value="100">100</option>
+          </select>
+        </label>
+      </div>
+      <!-- Proximity Clusters -->
+      <div id="clustersSection" style="margin-top: 24px;">
+        <h3>Proximity Clusters</h3>
+        <div style="margin-bottom: 10px;">
+          <label>Radius (meters): <input type="number" id="clusterRadius" min="10" step="10" value="200" /></label>
+          <label style="margin-left: 12px;">Min reports: <input type="number" id="clusterMinPts" min="2" step="1" value="2" /></label>
+          <label style="margin-left: 12px;">Time window (min): <input type="number" id="clusterTimeWindow" min="1" step="5" value="120" /></label>
+          <label style="margin-left: 12px;">
+            <input type="checkbox" id="clusterSameDate" checked /> Same date only
+          </label>
+          <button class="btn" id="clusterRecompute">Recompute</button>
+        </div>
+        <table>
+          <tbody id="clustersTable"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Vehicle Reports Tab -->
+    <div id="vehicleReportsSection" style="display: none;">
+      <h2>Vehicle Reports</h2>
+      <div style="margin:8px 0; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <button class="btn" id="printVehicleBtn" style="background:#2962ff;color:#fff;">Print & Download PDF</button>
+        <button class="btn" id="exportVehicleCsvBtn" style="background:#00796b;color:#fff;">Export CSV</button>
+        <label style="font-size:12px;">Status:
+          <select id="vehicleStatusFilter" style="padding:4px 6px;">
+            <option value="">All</option>
+            <option value="Pending">Pending</option>
+            <option value="Verified">Verified</option>
+            <option value="Rejected">Rejected</option>
+          </select>
+        </label>
+        <label style="font-size:12px;">From:
+          <input type="date" id="vehicleDateFrom" style="padding:4px 6px;" />
+        </label>
+        <label style="font-size:12px;">To:
+          <input type="date" id="vehicleDateTo" style="padding:4px 6px;" />
+        </label>
+        <label style="font-size:12px; display:flex; align-items:center; gap:4px;">
+          <input type="checkbox" id="vehicleIncludeImages" /> Images
+        </label>
+        <label style="font-size:12px;">Img Size:
+          <select id="vehicleImageSize" style="padding:4px 6px;">
+            <option value="sm" selected>Small</option>
+            <option value="md">Medium</option>
+            <option value="lg">Large</option>
+          </select>
+        </label>
+        <button class="btn" id="vehicleApplyFilters" style="background:#888;color:#fff;">Apply Filters</button>
+        <span id="vehicleExportStatus" style="font-size:12px;color:#666;"></span>
+        <span id="vehicleBrandTag" style="font-size:11px;color:#9c4a32;margin-left:auto;">METROGUIDE • Vehicle Incident Intelligence</span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Plate Number</th>
+            <th>Type</th>
+            <th>Date</th>
+            <th>Time</th>
+            <th>Location</th>
+            <th>Report</th>
+            <th>Status</th>
+            <th>Image</th>
+          </tr>
+        </thead>
+        <tbody id="vehicleReportsTable"></tbody>
+      </table>
+    </div>
+
+    <!-- History Tab -->
+    <!-- SOS Report Tab -->
+    <div id="sosSection" style="display: none;">
+      <h2>SOS Reports</h2>
+      <div style="display:flex; align-items:center; gap:12px; margin:8px 0 4px; flex-wrap:wrap;">
+        <span id="sosStatus" style="font-size:13px;color:#555;">Status: idle</span>
+        <button class="btn" id="sosRefreshBtn">Refresh</button>
+        <span id="sosViewNote" style="font-size:12px; color:#777; display:none;"></span>
+        <div style="flex-basis:100%; display:flex; gap:10px; flex-wrap:wrap;">
+          <button class="btn" id="printSOSBtn" style="background:#2962ff;color:#fff;">Print & Download PDF</button>
+          <button class="btn" id="exportSOSCsvBtn" style="background:#00796b;color:#fff;">Export CSV</button>
+          <input id="sosSearch" type="text" placeholder="Search email/username" style="padding:6px 8px; min-width:220px;" />
+          <label>Last:
+            <select id="sosTimeFilter" style="padding:6px 8px;">
+              <option value="">All time</option>
+              <option value="3600000">1h</option>
+              <option value="21600000">6h</option>
+              <option value="43200000">12h</option>
+              <option value="86400000" selected>24h</option>
+              <option value="604800000">7d</option>
+            </select>
+          </label>
+          <label style="font-size:12px;">From:
+            <input type="date" id="sosDateFrom" style="padding:4px 6px;" />
+          </label>
+          <label style="font-size:12px;">To:
+            <input type="date" id="sosDateTo" style="padding:4px 6px;" />
+          </label>
+          <label style="font-size:12px; display:flex; align-items:center; gap:4px;">
+            <input type="checkbox" id="sosIncludeCoords" checked /> Include Coordinates
+          </label>
+          <button class="btn" id="sosApplyFilters" style="background:#888;color:#fff;">Apply Filters</button>
+          <span id="sosExportStatus" style="font-size:12px;color:#666;"></span>
+          <span id="sosFilterStatus" style="font-size:12px; color:#666;"></span>
+        </div>
+        <div style="flex-basis:100%; font-size:11px; color:#9c4a32; text-align:right;">
+          METROGUIDE • Emergency Response Intelligence
+        </div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Email</th>
+            <th>Username</th>
+            <th>Latitude</th>
+            <th>Longitude</th>
+            <th>Timestamp</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="sosTable"></tbody>
+      </table>
+    </div>
+    <div id="historySection" style="display: none;">
+      <h2>History (Verified & Rejected Reports)</h2>
+      <div style="margin:8px 0; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <button class="btn" id="printHistoryBtn" style="background:#2962ff;color:#fff;">Print & Download PDF</button>
+        <button class="btn" id="exportHistoryCsvBtn" style="background:#00796b;color:#fff;">Export CSV</button>
+        <label style="font-size:12px;">Status:
+          <select id="historyStatusFilter" style="padding:4px 6px;">
+            <option value="">All</option>
+            <option value="Verified">Verified</option>
+            <option value="Rejected">Rejected</option>
+          </select>
+        </label>
+        <label style="font-size:12px;">From:
+          <input type="date" id="historyDateFrom" style="padding:4px 6px;" />
+        </label>
+        <label style="font-size:12px;">To:
+          <input type="date" id="historyDateTo" style="padding:4px 6px;" />
+        </label>
+        <label style="font-size:12px; display:flex; align-items:center; gap:4px;">
+          <input type="checkbox" id="historyIncludeImages" /> Images
+        </label>
+        <label style="font-size:12px;">Img Size:
+          <select id="historyImageSize" style="padding:4px 6px;">
+            <option value="sm" selected>Small</option>
+            <option value="md">Medium</option>
+            <option value="lg">Large</option>
+          </select>
+        </label>
+        <button class="btn" id="historyApplyFilters" style="background:#888;color:#fff;">Apply Filters</button>
+        <span id="historyExportStatus" style="font-size:12px;color:#666;"></span>
+        <span id="historyBrandTag" style="font-size:11px;color:#9c4a32;margin-left:auto;">METROGUIDE • Safety & Incident Intelligence</span>
+      </div>
+      <table>
+        <tbody id="historyTable"></tbody>
+      </table>
+      <div style="font-size:12px; color:#666; margin-top:4px;" id="historyStatus"></div>
+    </div>
+
+    <!-- Users & Stats Tab -->
+    <div id="usersSection" style="display: none;">
+      <h2>Users</h2>
+      <p><strong>Total Users:</strong> <span id="userCount">0</span></p>
+      <table>
+        <thead>
+          <tr>
+            <th>User ID</th>
+            <th>Email</th>
+            <th>Name</th>
+            <th>Role</th>
+          </tr>
+        </thead>
+        <tbody id="usersTable"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <footer>
+    &copy; 2025 METROGUIDE AI System. All rights reserved.
+  </footer>
+
+  <!-- Image Modal -->
+  <div id="imageModal" class="image-modal">
+    <span class="image-modal-close" onclick="closeImageModal()">&times;</span>
+    <div class="image-modal-content">
+      <img id="modalImage" src="" alt="Full Size Image">
+    </div>
+  </div>
+
+  <!-- Map Modal -->
+  <div id="mapModal" class="map-modal">
+    <div class="map-modal-content">
+      <div class="map-modal-header">
+        <h3 id="mapModalTitle">SOS Location</h3>
+        <button class="map-modal-close" onclick="closeMapModal()">&times;</button>
+      </div>
+      <div id="map" class="map-container"></div>
+    </div>
+  </div>
+
+  <!-- Google Maps API -->
+  <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBt_cadPawsmuQVvWTbK1Kzhin5lS0eU88&libraries=geometry"></script>
+  
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions.js"></script>
+  <!-- jsPDF & AutoTable for PDF export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" integrity="sha512-/F0q9t6YewsGmmKzBSSMSmc5QwDFi1Cdm42Hcps225y7sY9qsut0kGugHgd6NqBJ38qJNmPR9U1FVLtZLf5B8g==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js" integrity="sha512-wtU9N3Wf9eKJeNEqXWiwxupCSvJzpuG1HsfrN7kYM/qfNwCuWHa3gwxObn2ymlk/wEYBLETymFcpnSUsctNk6w==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="module.js" type="module"></script>
+  
+</body>
+</html>

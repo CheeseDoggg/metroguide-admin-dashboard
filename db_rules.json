@@ -1,0 +1,187 @@
+{
+  "rules": {
+    "public_data": {
+      ".read": "true",
+      ".write": "auth != null"
+    },  
+    "incidents": {
+      ".read": "auth != null",
+      ".indexOn": ["timestamp", "userId"],
+      "$uid": {
+        ".read": "auth != null",
+        ".write": "auth != null && (auth.uid == $uid || root.child('admins').child(auth.uid).val() === true || auth.token.email == 'metroguidenu@gmail.com')",
+        "$incident_id": {
+          ".validate": "newData.hasChildren(['email', 'username', 'category', 'latlng', 'address', 'rdInc_status', 'description', 'timestamp'])",
+          "email": {
+            ".validate": "newData.isString() && newData.val() == auth.token.email"
+          },
+          "username": {
+            ".validate": "newData.isString()"
+          },
+          "imagefile": {
+            ".validate": "!newData.exists() || newData.isString()"
+          },
+          "category": {
+            ".validate": "newData.isString()"
+          },
+          "latlng": {
+            ".validate": "newData.isString() && newData.val().matches(/^-?\\d+\\.\\d+,-?\\d+\\.\\d+$/)"
+          },
+          "address": {
+            ".validate": "newData.isString()"
+          },
+          "rdInc_status": {
+            ".validate": "newData.isString()"
+          },
+          "description": {
+            ".validate": "newData.isString()"
+          },
+          "timestamp": {
+            ".validate": "newData.isNumber()"
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      }
+    },
+    "notifications": {
+  ".read": "auth != null",
+  "$notification_id": {
+    ".write": "auth != null",
+        ".validate": "newData.hasChildren(['incidentId', 'userId', 'userEmail', 'category', 'address', 'status', 'timestamp'])",
+        "userId": {
+          ".validate": "newData.val() == auth.uid"
+        },
+        "userEmail": {
+          ".validate": "newData.val() == auth.token.email"
+        },
+        "$other": {
+          ".validate": true
+        }
+      }
+    },
+    "users": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+      ".indexOn": ["email", "firebaseUID", "userID"],
+      "$uid": {
+        ".read": "auth != null && auth.uid == $uid",
+        ".write": "auth != null",
+        ".validate": "newData.hasChildren(['email', 'name', 'userID', 'firebaseUID'])"
+      }
+    },
+    "user-notifications": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+      ".indexOn": ["timestamp"],
+      "$uid": {
+        ".read": "auth != null && auth.uid == $uid",
+        ".write": "auth != null && auth.uid == $uid",
+        "$notification_id": {
+          ".validate": "newData.hasChildren(['notificationId', 'incidentId', 'title', 'location', 'timestamp'])"
+        }
+      }
+    },
+    "user_count": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+    "otp_verification": {
+  "$email": {
+    ".read": true,
+    ".write": true,
+    "otp": { ".validate": "newData.isString()" },
+    "expiryTime": { ".validate": "newData.isNumber()" }
+  }
+},
+"vehicle_reports": {
+      ".read": "auth != null",
+      ".indexOn": ["timestamp", "email", "plate_no"],
+      "$uid": {
+        ".read": "auth != null && auth.uid == $uid",
+        ".write": "auth != null && (auth.uid == $uid || root.child('admins').child(auth.uid).val() === true || auth.token.email == 'metroguidenu@gmail.com')",
+        "$report_id": {
+          ".validate": "newData.hasChildren(['email', 'username', 'plate_no', 'type', 'date', 'time', 'location', 'detail', 'imagefile', 'latlng', 'rdInc_status', 'timestamp'])",
+          "email": {
+            ".validate": "newData.isString() && newData.val() == auth.token.email"
+          },
+          "username": {
+            ".validate": "newData.isString()"
+          },
+          "plate_no": {
+            ".validate": "newData.isString()"
+          },
+          "type": {
+            ".validate": "newData.isString()"
+          },
+          "date": {
+            ".validate": "newData.isString()"
+          },
+          "time": {
+            ".validate": "newData.isString()"
+          },
+          "location": {
+            ".validate": "newData.isString()"
+          },
+          "detail": {
+            ".validate": "newData.isString()"
+          },
+          "imagefile": {
+            ".validate": "!newData.exists() || newData.isString()"
+          },
+          "latlng": {
+            ".validate": "!newData.exists() || (newData.isString() && newData.val().matches(/^-?\\d+\\.\\d+,-?\\d+\\.\\d+$/))"
+          },
+          "rdInc_status": {
+            ".validate": "newData.isString()"
+          },
+          "timestamp": {
+            ".validate": "newData.isNumber()"
+          },
+          "$other": {
+            ".validate": true
+          }
+        }
+      }
+    },
+    "sos_logs": {
+      ".read": "auth != null",
+      ".indexOn": ["timestamp"],
+      "$userId": {
+        ".read": "auth != null",
+        ".write": "auth != null && (auth.uid == $userId || root.child('admins').child(auth.uid).val() === true)",
+        "$sos_id": {
+          ".validate": "newData.hasChildren(['email', 'latitude', 'longitude', 'timestamp'])"
+        },
+        "email": {
+          ".validate": "newData.isString() && (auth.uid == $userId || root.child('admins').child(auth.uid).val() === true)"
+        },
+        "username": {
+          ".validate": "!newData.exists() || newData.isString()"
+        },
+        "latitude": {
+          ".validate": "newData.isNumber()"
+        },
+        "longitude": {
+          ".validate": "newData.isNumber()"
+        },
+        "timestamp": {
+          ".validate": "newData.isNumber()"
+        },
+        "deleted": {
+          ".validate": "!newData.exists() || newData.val() === true"
+        }
+      }
+    }
+    ,"moderation_logs": {
+      ".read": "auth != null && root.child('admins').child(auth.uid).val() === true",
+      ".write": false
+    }
+    ,"archived_incidents": {
+      ".read": "auth != null && root.child('admins').child(auth.uid).val() === true",
+      ".write": false
+    }
+
+  }
+}

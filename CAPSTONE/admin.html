@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SmartCommute | AI-Enhanced Public Transport</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(to right, rgba(255, 255, 255, 0.9));
+      color: rgba(197, 99, 69, 0.9); /* light orange text */
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    header {
+      background-color: rgba(197, 99, 69, 0.9); /* deep orange */
+      padding: 20px 40px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 28px;
+      color: #ffffff;
+    }
+
+    .admin-button {
+      padding: 10px 20px;
+      background-color: rgba(197, 99, 69, 0.9);
+      border: none;
+      color: white;
+      border-radius: 5px;
+      text-decoration: none;
+      font-weight: bold;
+      transition: background-color 0.3s ease;
+    }
+
+    .admin-button:hover {
+      background-color: #bf360c;
+    }
+
+    .hero {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      padding: 60px 20px;
+    }
+
+    .hero h2 {
+      font-size: 36px;
+      margin-bottom: 20px;
+    }
+
+    .hero p {
+      font-size: 20px;
+      max-width: 600px;
+      line-height: 1.6;
+    }
+
+    footer {
+      text-align: center;
+      padding: 20px;
+      background-color: rgba(255, 255, 255, 0.9);
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+<!-- Firebase App (the core Firebase SDK) -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js"></script>
+
+<!-- Firebase Auth -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js"></script>
+
+<script>
+  // Your web app's Firebase configuration
+  const firebaseConfig = {
+   apiKey: "AIzaSyA0t-0Cq6JQr5PfgdZC8XvmvLvq_E3C088",
+  authDomain: "metro-guide-6b52a.firebaseapp.com",
+  databaseURL: "https://metro-guide-6b52a-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "metro-guide-6b52a",
+  storageBucket: "metro-guide-6b52a.firebasestorage.app",
+  messagingSenderId: "389866237139",
+  appId: "1:389866237139:web:c08e31880beea53c593826",
+  measurementId: "G-7RKQXWNPGL"
+  };
+
+  // Initialize Firebase
+  firebase.initializeApp(firebaseConfig);
+</script>
+
+
+  <header>
+    <h1>METROGUIDE</h1>
+    <a href="login.html" class="admin-button">Admin Login</a>
+  </header>
+
+  <section class="hero">
+    <h2>Welcome to METROGUIDE</h2>
+    <p>
+      Enhancing public commuting using Artificial Intelligence and community-sourced incident reporting. 
+      Get real-time route insights, avoid congested areas, and improve your travel experience.
+    </p>
+  </section>
+
+  <footer>
+    &copy; 2025 SmartCommute AI System. All rights reserved.
+  </footer>
+</body>
+</html>

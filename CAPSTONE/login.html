@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin Login | METROGUIDE</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(to right, rgba(255, 255, 255, 0.9));
+      color: rgba(197, 99, 69, 0.9);
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+    header {
+      background-color: rgba(197, 99, 69, 0.9);
+      padding: 20px 40px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 28px;
+      color: #ffffff;
+    }
+    .admin-button {
+      padding: 10px 20px;
+      background-color: rgba(197, 99, 69, 0.9);
+      border: none;
+      color: white;
+      border-radius: 5px;
+      text-decoration: none;
+      font-weight: bold;
+      transition: background-color 0.3s ease;
+    }
+    .admin-button:hover {
+      background-color: #bf360c;
+    }
+    .login-container {
+      background-color: rgba(255, 255, 255, 0.95);
+      padding: 40px;
+      border-radius: 10px;
+      width: 100%;
+      max-width: 400px;
+      margin: 60px auto;
+      box-shadow: 0 0 15px rgba(197, 99, 69, 0.2);
+    }
+    .login-container h2 {
+      text-align: center;
+      color: rgba(197, 99, 69, 0.9);
+      margin-bottom: 30px;
+    }
+    input[type="text"],
+    input[type="password"] {
+      width: 100%;
+      padding: 12px 15px;
+      margin: 10px 0;
+      border: 1px solid rgba(197, 99, 69, 0.3);
+      border-radius: 5px;
+      box-sizing: border-box;
+    }
+    input[type="submit"] {
+      width: 100%;
+      padding: 12px;
+      background-color: rgba(197, 99, 69, 0.9);
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    input[type="submit"]:hover {
+      background-color: #bf360c;
+    }
+    footer {
+      text-align: center;
+      padding: 20px;
+      background-color: rgba(255, 255, 255, 0.9);
+      font-size: 14px;
+      color: rgba(197, 99, 69, 0.9);
+      margin-top: auto;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>METROGUIDE</h1>
+    <a href="admin.html" class="admin-button">Back to Home</a>
+  </header>
+
+  <div class="login-container">
+    <h2>Admin Login</h2>
+    <form id="loginForm">
+      <label for="email">Email</label>
+      <input type="text" id="email" placeholder="Enter admin email" required>
+
+      <label for="password">Password</label>
+      <input type="password" id="password" placeholder="Enter password" required>
+
+      <input type="submit" value="Login">
+      <div style="margin: 20px 0; text-align: center;">
+        <button type="button" id="googleSignInBtn" style="background:#4285F4;color:#fff;border:none;padding:10px 20px;border-radius:5px;font-weight:bold;cursor:pointer;">Sign in with Google</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Firebase App -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js"></script>
+  <!-- Firebase Auth -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js"></script>
+
+  <script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+  import { getAuth, signInWithEmailAndPassword, signOut, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
+  import { getDatabase, ref, get, child } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
+
+  // Admin credentials (update UID if needed)
+  const ADMIN_UID = "6JlHBvF9VmcgZ4U8OAOkbZgo0Vq2"; // Correct UID from your database
+  const ADMIN_EMAIL = "metroguidenu@gmail.com";
+
+    // Firebase config
+    const firebaseConfig = {
+      apiKey: "AIzaSyA0t-0Cq6JQr5PfgdZC8XvmvLvq_E3C088",
+      authDomain: "metro-guide-6b52a.firebaseapp.com",
+      databaseURL: "https://metro-guide-6b52a-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "metro-guide-6b52a",
+      storageBucket: "metro-guide-6b52a.firebasestorage.app",
+      messagingSenderId: "389866237139",
+      appId: "1:389866237139:web:c08e31880beea53c593826",
+      measurementId: "G-7RKQXWNPGL"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getDatabase(app);
+
+    // Helper: SHA-256 hash function
+    async function hashPassword(password) {
+      const encoder = new TextEncoder();
+      const data = encoder.encode(password);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    document.getElementById("loginForm").addEventListener("submit", async function (e) {
+      e.preventDefault();
+
+      const email = document.getElementById("email").value;
+      const password = document.getElementById("password").value;
+
+      try {
+        // This admin account uses Google Sign-In only. Show message if email/password is used.
+        if (email === ADMIN_EMAIL) {
+          alert("This admin account uses Google Sign-In. Please use the Google button below.");
+          return;
+        }
+        // Otherwise, allow normal login for other users (if needed)
+        alert("Login error: Only Google Sign-In is allowed for this admin account.");
+      } catch (err) {
+        alert("Login error: " + err.message);
+      }
+    });
+
+    // Google Sign-In handler
+    document.getElementById("googleSignInBtn").addEventListener("click", async function () {
+      const provider = new GoogleAuthProvider();
+      try {
+        const result = await signInWithPopup(auth, provider);
+        const user = result.user;
+        if (user.uid !== ADMIN_UID || user.email !== ADMIN_EMAIL) {
+          alert("Access denied: Only admin can login.");
+          await signOut(auth);
+          return;
+        }
+        // Successful login
+        alert("Admin login successful!");
+        window.location.href = "home.html";
+      } catch (err) {
+        alert("Google Sign-In error: " + err.message);
+      }
+    });
+  </script>
+
+  <footer>
+    &copy; 2025 METROGUIDE AI System. All rights reserved.
+  </footer>
+</body>
+</html>
