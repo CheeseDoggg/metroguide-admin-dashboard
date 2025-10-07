@@ -25,6 +25,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebas
   let sosTriedFallback = false; // avoid infinite retries
   let sosPerUserMode = false; // when true, listening under sos_path/<auth.uid>
   let sosTriedFunctionFallback = false; // try callable only once
+  // prevent multiple onValue listeners for History
+  let historyRefCurrent = null; // current ref used for history onValue
   // current admin state
   let isAdmin = false;
   // Attempt to resolve admin status from several possible locations
@@ -66,7 +68,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebas
     if (badge) badge.style.display = isAdmin ? 'inline-block' : 'none';
     // Default load incidents tab
     loadReports();
-    loadHistory(); // pre-cache history so switching is quick
     loadVehicleReports(); // optional pre-load
   });
 
@@ -651,8 +652,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebas
 
     // 🚨 Verified History
     function loadHistory() {
-      const historyRef = ref(db, 'incidents');
-      onValue(historyRef, (snapshot) => {
+      // Detach any existing listener to avoid duplicates
+      if (historyRefCurrent) {
+        try { off(historyRefCurrent); } catch (_) {}
+      }
+      historyRefCurrent = ref(db, 'incidents');
+      onValue(historyRefCurrent, (snapshot) => {
         const historyTable = document.getElementById('historyTable');
         // Header
         historyTable.innerHTML = `
