@@ -1389,7 +1389,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebas
               userSnap.forEach(logSnap => {
                 const log = logSnap.val() || {};
                 if (log.deleted) return;
-                const email = log.email || 'N/A';
+                const email = log.email || (usersCache?.[k]?.email) || 'N/A';
                 const username = resolveUsername({ uid: k, inlineUsername: log.username || log.userName || log.name, email });
                 list.push({
                   userId: k,
@@ -1406,7 +1406,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebas
               const log = v || {};
               if (log.deleted) return;
               const uid = log.userId || log.uid || k;
-              const email = log.email || 'N/A';
+              const email = log.email || (usersCache?.[uid]?.email) || 'N/A';
               const username = resolveUsername({ uid, inlineUsername: log.username || log.userName || log.name, email });
               list.push({
                 userId: uid,
@@ -1574,6 +1574,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebas
       sosPerUserMode = true;
       const sosStatus = document.getElementById('sosStatus');
       if (sosStatus) sosStatus.textContent = `Status: trying per-user read…`;
+      // ensure this user's profile is available in cache
+      try {
+        if (!usersCache) usersCache = {};
+        if (!usersCache[uid]) {
+          const uSnap = await get(ref(db, `users/${uid}`));
+          if (uSnap.exists()) usersCache[uid] = uSnap.val() || {};
+        }
+      } catch(_) {}
       const candidates = ['sos_logs', 'sos'];
       let chosenBase = null;
       for (const base of candidates) {
@@ -1612,7 +1620,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebas
             const tsNum = pickTimestamp(log);
             const lat = pickLat(log);
             const lng = pickLng(log);
-            const email = log.email || (auth.currentUser?.email || 'N/A');
+            const email = log.email || usersCache?.[uid]?.email || (auth.currentUser?.email || 'N/A');
             const username = resolveUsername({ uid, inlineUsername: log.username || log.userName || log.name, email });
             entries.push({
               userId: uid,
