@@ -44,6 +44,32 @@
       background-color: #bf360c;
     }
 
+    .download-apk-btn {
+      position: fixed;
+      bottom: 30px;
+      right: 30px;
+      background-color: #FF6B35;
+      padding: 12px 20px;
+      border: none;
+      color: white;
+      border-radius: 50px;
+      text-decoration: none;
+      font-weight: bold;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      transition: background-color 0.3s ease, transform 0.2s ease;
+      box-shadow: 0 4px 12px rgba(255, 107, 53, 0.4);
+      z-index: 999;
+    }
+
+    .download-apk-btn:hover {
+      background-color: #E55A24;
+      transform: scale(1.05);
+    }
+
     .hero {
       flex: 1;
       display: flex;
@@ -98,12 +124,9 @@
 </script>
 
 
-  <header style="display: flex; justify-content: space-between; align-items: center;">
+  <header>
     <h1>METROGUIDE</h1>
-    <div style="display: flex; gap: 15px;">
-      <a href="https://drive.google.com/file/d/1Mwc9Nn90W4qS982L9hpoHscIRBRDGbqU/view?usp=drive_link" target="_blank" class="admin-button" style="background-color: #FF6B35; display: flex; align-items: center; gap: 8px;">📱 Download APK</a>
-      <a href="login.html" class="admin-button">Admin Login</a>
-    </div>
+    <a href="login.html" class="admin-button">Admin Login</a>
   </header>
 
   <section class="hero">
@@ -117,5 +140,7 @@
   <footer>
     &copy; 2025 SmartCommute AI System. All rights reserved.
   </footer>
+
+  <a href="https://drive.google.com/file/d/1Mwc9Nn90W4qS982L9hpoHscIRBRDGbqU/view?usp=drive_link" target="_blank" class="download-apk-btn">📱 Download APK</a>
 </body>
 </html>
