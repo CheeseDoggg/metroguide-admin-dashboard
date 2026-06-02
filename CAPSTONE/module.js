@@ -25,6 +25,47 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebas
   let sosTriedFallback = false; // avoid infinite retries
   let sosPerUserMode = false; // when true, listening under sos_path/<auth.uid>
   let sosTriedFunctionFallback = false; // try callable only once
+  // cache of users for resolving display names in SOS
+  let usersCache = null; // { [uid]: { name, username, displayName, email, ... } }
+
+  // Preload users cache (best-effort)
+  async function preloadUsersCache() {
+    if (usersCache !== null) return; // already loaded or attempted
+    try {
+      const snap = await get(ref(db, 'users'));
+      const map = {};
+      if (snap.exists()) {
+        snap.forEach(child => { map[child.key] = child.val() || {}; });
+      }
+      usersCache = map;
+    } catch (e) {
+      console.warn('[SOS] Unable to preload users cache:', e?.code || e);
+      usersCache = {}; // mark attempted
+    }
+  }
+
+  // Resolve username with fallbacks: inline -> usersCache -> auth displayName (if matching uid) -> email local-part -> 'N/A'
+  function resolveUsername({ uid, inlineUsername, email }) {
+    const firstNonEmpty = (...vals) => vals.find(v => v && String(v).trim()) || '';
+    // 1) if provided in log
+    const u1 = firstNonEmpty(inlineUsername);
+    if (u1) return u1;
+    // 2) users cache
+    const rec = usersCache && uid ? usersCache[uid] : null;
+    const u2 = rec ? firstNonEmpty(rec.username, rec.name, rec.displayName, rec.fullName) : '';
+    if (u2) return u2;
+    // 3) fall back to auth displayName if matches current user
+    if (auth.currentUser && uid && auth.currentUser.uid === uid && auth.currentUser.displayName) {
+      return auth.currentUser.displayName;
+    }
+    // 4) derive from email local-part
+    if (email && String(email).includes('@')) {
+      return String(email).split('@')[0];
+    }
+    return 'N/A';
+  }
+  // prevent multiple onValue listeners for History
+  let historyRefCurrent = null; // current ref used for history onValue
   // current admin state
   let isAdmin = false;
   // Attempt to resolve admin status from several possible locations
@@ -66,7 +107,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebas
     if (badge) badge.style.display = isAdmin ? 'inline-block' : 'none';
     // Default load incidents tab
     loadReports();
-    loadHistory(); // pre-cache history so switching is quick
     loadVehicleReports(); // optional pre-load
   });
 
@@ -651,8 +691,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebas
 
     // 🚨 Verified History
     function loadHistory() {
-      const historyRef = ref(db, 'incidents');
-      onValue(historyRef, (snapshot) => {
+      // Detach any existing listener to avoid duplicates
+      if (historyRefCurrent) {
+        try { off(historyRefCurrent); } catch (_) {}
+      }
+      historyRefCurrent = ref(db, 'incidents');
+      onValue(historyRefCurrent, (snapshot) => {
         const historyTable = document.getElementById('historyTable');
         // Header
         historyTable.innerHTML = `
@@ -1287,6 +1331,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebas
       if (sosStatus) sosStatus.textContent = 'Status: probing paths…';
       sosPerUserMode = false;
       if (sosRefCurrent) { try { off(sosRefCurrent); } catch(_) {} }
+      // Try to load users cache in background so usernames resolve nicely
+      try { await preloadUsersCache(); } catch(_) {}
 
       const candidatePaths = ['sos_logs', 'sos'];
       let attached = false;
@@ -1343,11 +1389,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebas
               userSnap.forEach(logSnap => {
                 const log = logSnap.val() || {};
                 if (log.deleted) return;
+                const email = log.email || (usersCache?.[k]?.email) || 'N/A';
+                const username = resolveUsername({ uid: k, inlineUsername: log.username || log.userName || log.name, email });
                 list.push({
                   userId: k,
                   logId: logSnap.key,
-                  email: log.email || 'N/A',
-                  username: log.username || 'N/A',
+                  email,
+                  username,
                   lat: pickLat(log) ?? log.latitude ?? 'N/A',
                   lng: pickLng(log) ?? log.longitude ?? 'N/A',
                   tsNum: pickTimestamp(log),
@@ -1357,11 +1405,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebas
             } else {
               const log = v || {};
               if (log.deleted) return;
+              const uid = log.userId || log.uid || k;
+              const email = log.email || (usersCache?.[uid]?.email) || 'N/A';
+              const username = resolveUsername({ uid, inlineUsername: log.username || log.userName || log.name, email });
               list.push({
-                userId: log.userId || log.uid || k,
+                userId: uid,
                 logId: k,
-                email: log.email || 'N/A',
-                username: log.username || 'N/A',
+                email,
+                username,
                 lat: pickLat(log) ?? log.latitude ?? 'N/A',
                 lng: pickLng(log) ?? log.longitude ?? 'N/A',
                 tsNum: pickTimestamp(log),
@@ -1392,6 +1443,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebas
           const tsDisplay = Number.isFinite(e.tsNum) ? new Date(e.tsNum).toLocaleString() : (e.rawTs ? (isNaN(new Date(e.rawTs).getTime()) ? 'N/A' : new Date(e.rawTs).toLocaleString()) : 'N/A');
             const tr = document.createElement('tr');
             const hasValidCoords = Number.isFinite(e.lat) && Number.isFinite(e.lng);
+            const safeUser = String(e.username || '').replace(/'/g, "\\'");
             tr.innerHTML = `
               <td>${e.email}</td>
               <td>${e.username}</td>
@@ -1399,7 +1451,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebas
               <td>${e.lng}</td>
               <td>${tsDisplay}</td>
               <td>
-                ${hasValidCoords ? `<button class="btn btn-view" onclick="openMapModal(${e.lat}, ${e.lng}, '${e.email}', '${e.username}')">View</button>` : ''}
+                ${hasValidCoords ? `<button class="btn btn-view" onclick="openMapModal(${e.lat}, ${e.lng}, '${e.email}', '${safeUser}')">View</button>` : ''}
                 <button class="btn btn-reject" data-user="${e.userId}" data-key="${e.logId}">Delete</button>
               </td>`;
             sosTable.appendChild(tr);
@@ -1461,11 +1513,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebas
           const tsNum = pickTimestamp(item) ?? (typeof item.ts === 'number' ? item.ts : null);
           const lat = pickLat(item);
           const lng = pickLng(item);
+          const uid = item.userId || item.uid || 'unknown';
+          const email = item.email || 'N/A';
+          const username = resolveUsername({ uid, inlineUsername: item.username || item.userName || item.name, email });
           return {
-            userId: item.userId || item.uid || 'unknown',
+            userId: uid,
             logId: item.id || item.logId || item.key || '',
-            email: item.email || 'N/A',
-            username: item.username || item.userName || item.name || 'N/A',
+            email,
+            username,
             lat: Number.isFinite(lat) ? lat : (item.latitude ?? null),
             lng: Number.isFinite(lng) ? lng : (item.longitude ?? null),
             tsNum,
@@ -1490,6 +1545,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebas
           const tsDisplay = Number.isFinite(e.tsNum) ? new Date(e.tsNum).toLocaleString() : (e.rawTs ? (isNaN(new Date(e.rawTs).getTime()) ? 'N/A' : new Date(e.rawTs).toLocaleString()) : 'N/A');
           const tr = document.createElement('tr');
           const hasValidCoords = Number.isFinite(e.lat) && Number.isFinite(e.lng);
+          const safeUser = String(e.username || '').replace(/'/g, "\\'");
           tr.innerHTML = `
             <td>${e.email}</td>
             <td>${e.username}</td>
@@ -1497,7 +1553,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebas
             <td>${e.lng ?? 'N/A'}</td>
             <td>${tsDisplay}</td>
             <td>
-              ${hasValidCoords ? `<button class="btn btn-view" onclick="openMapModal(${e.lat}, ${e.lng}, '${e.email}', '${e.username}')">View</button>` : ''}
+              ${hasValidCoords ? `<button class="btn btn-view" onclick="openMapModal(${e.lat}, ${e.lng}, '${e.email}', '${safeUser}')">View</button>` : ''}
               <!-- server data: delete disabled -->
             </td>`;
           sosTable.appendChild(tr);
@@ -1518,6 +1574,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebas
       sosPerUserMode = true;
       const sosStatus = document.getElementById('sosStatus');
       if (sosStatus) sosStatus.textContent = `Status: trying per-user read…`;
+      // ensure this user's profile is available in cache
+      try {
+        if (!usersCache) usersCache = {};
+        if (!usersCache[uid]) {
+          const uSnap = await get(ref(db, `users/${uid}`));
+          if (uSnap.exists()) usersCache[uid] = uSnap.val() || {};
+        }
+      } catch(_) {}
       const candidates = ['sos_logs', 'sos'];
       let chosenBase = null;
       for (const base of candidates) {
@@ -1556,8 +1620,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebas
             const tsNum = pickTimestamp(log);
             const lat = pickLat(log);
             const lng = pickLng(log);
-            const email = log.email || (auth.currentUser?.email || 'N/A');
-            const username = log.username || auth.currentUser?.displayName || 'N/A';
+            const email = log.email || usersCache?.[uid]?.email || (auth.currentUser?.email || 'N/A');
+            const username = resolveUsername({ uid, inlineUsername: log.username || log.userName || log.name, email });
             entries.push({
               userId: uid,
               logId: logSnap.key,
@@ -1591,6 +1655,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebas
           const tsDisplay = Number.isFinite(e.tsNum) ? new Date(e.tsNum).toLocaleString() : (e.rawTs ? (isNaN(new Date(e.rawTs).getTime()) ? 'N/A' : new Date(e.rawTs).toLocaleString()) : 'N/A');
           const tr = document.createElement('tr');
           const hasValidCoords = Number.isFinite(e.lat) && Number.isFinite(e.lng);
+          const safeUser = String(e.username || '').replace(/'/g, "\\'");
           tr.innerHTML = `
             <td>${e.email}</td>
             <td>${e.username}</td>
@@ -1598,7 +1663,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebas
             <td>${e.lng ?? 'N/A'}</td>
             <td>${tsDisplay}</td>
             <td>
-              ${hasValidCoords ? `<button class="btn btn-view" onclick="openMapModal(${e.lat}, ${e.lng}, '${e.email}', '${e.username}')">View</button>` : ''}
+              ${hasValidCoords ? `<button class=\"btn btn-view\" onclick=\"openMapModal(${e.lat}, ${e.lng}, '${e.email}', '${safeUser}')\">View</button>` : ''}
               <button class="btn btn-reject" data-user="${e.userId}" data-key="${e.logId}">Delete</button>
             </td>`;
           table.appendChild(tr);
