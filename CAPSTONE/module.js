@@ -716,7 +716,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebas
           return;
         }
 
-        // Collect nested incidents and filter Verified and Rejected
+        // Collect nested incidents and filter Verified, Rejected, and Deleted
         const historyReports = [];
         snapshot.forEach((userSnap) => {
           const userId = userSnap.key;
@@ -724,7 +724,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebas
             const data = incidentSnap.val() || {};
             const incidentId = incidentSnap.key;
             const status = String(data.rdInc_status || '').toLowerCase();
-            if (status === 'verified' || status === 'rejected') {
+            if (status === 'verified' || status === 'rejected' || status === 'deleted') {
               const tsNum = pickTimestamp(data);
               historyReports.push({ userId, incidentId, data, tsNum });
             }
@@ -805,15 +805,20 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebas
       }
       filtered.sort((a,b)=>(Number.isFinite(b.tsNum)?b.tsNum:-Infinity)-(Number.isFinite(a.tsNum)?a.tsNum:-Infinity));
       filtered.forEach((r, idx) => {
-        const color = r.status.toLowerCase() === 'verified' ? '#4caf50' : '#f44336';
+        const color = r.status.toLowerCase() === 'verified' ? '#4caf50' : (r.status.toLowerCase() === 'deleted' ? '#999999' : '#f44336');
         const imgHtml = buildImageCell(r.image, `history/${r.username}/${r.tsNum||''}`);
         const tr = document.createElement('tr');
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'btn btn-reject';
-        deleteBtn.textContent = 'Delete';
+        deleteBtn.textContent = r.status.toLowerCase() === 'deleted' ? 'Already Deleted' : 'Delete';
+        deleteBtn.disabled = r.status.toLowerCase() === 'deleted';
+        deleteBtn.style.opacity = r.status.toLowerCase() === 'deleted' ? '0.5' : '1';
+        deleteBtn.style.cursor = r.status.toLowerCase() === 'deleted' ? 'not-allowed' : 'pointer';
         deleteBtn.dataset.userId = r.userId;
         deleteBtn.dataset.incidentId = r.incidentId;
-        deleteBtn.addEventListener('click', () => deleteHistoryReport(r.userId, r.incidentId));
+        if (r.status.toLowerCase() !== 'deleted') {
+          deleteBtn.addEventListener('click', () => deleteHistoryReport(r.userId, r.incidentId));
+        }
         tr.innerHTML = `
           <td>${r.location}</td>
           <td class="description-cell">${r.description}</td>
@@ -1719,13 +1724,16 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebas
 
     // Delete history/incident report
     function deleteHistoryReport(userId, incidentId) {
-      if (!confirm('Are you sure you want to delete this report? This will also delete it from the mobile app.')) {
+      if (!confirm('Are you sure you want to delete this report? This will also delete it from the mobile app (automatically purged in 2 hours).')) {
         return;
       }
       const refToDelete = ref(db, `incidents/${userId}/${incidentId}`);
-      update(refToDelete, { rdInc_status: 'deleted' })
+      update(refToDelete, { 
+        rdInc_status: 'deleted',
+        deletedAt: new Date().getTime()
+      })
         .then(() => {
-          alert('Report deleted successfully!');
+          alert('Report deleted successfully! (Will be automatically purged in 2 hours)');
           loadHistory(); // Refresh the table
         })
         .catch(err => alert('Error deleting report: ' + err.message));

@@ -450,3 +450,54 @@ exports.autoVerifyClusteredIncidents = onSchedule({ schedule: 'every 5 minutes',
     return { autoVerified: 0, error: e.message };
   }
 });
+
+// Automatically purge incident reports marked as deleted after 2 hours
+exports.purgeDeletedIncidents = onSchedule({ schedule: 'every 1 minutes', timeZone: 'Asia/Manila' }, async () => {
+  try {
+    const now = Date.now();
+    const TWO_HOURS_MS = 2 * 60 * 60 * 1000; // 2 hours in milliseconds
+    let purgedCount = 0;
+
+    // Scan all incidents
+    const incidentsSnapshot = await rtdb.ref('incidents').get();
+    if (!incidentsSnapshot.exists()) {
+      return { purged: 0 };
+    }
+
+    const allIncidents = incidentsSnapshot.val();
+    const updates = [];
+
+    // Iterate through all users and their incidents
+    Object.keys(allIncidents).forEach(userId => {
+      const userIncidents = allIncidents[userId];
+      if (!userIncidents || typeof userIncidents !== 'object') return;
+
+      Object.keys(userIncidents).forEach(incidentId => {
+        const incident = userIncidents[incidentId];
+        if (!incident || typeof incident !== 'object') return;
+
+        // Check if incident is marked as deleted
+        if (incident.rdInc_status === 'deleted' && incident.deletedAt) {
+          const deletedAt = normalizeTimestamp(incident.deletedAt);
+          if (deletedAt && (now - deletedAt) >= TWO_HOURS_MS) {
+            // Purge this incident
+            updates.push(
+              rtdb.ref(`incidents/${userId}/${incidentId}`).remove()
+                .then(() => {
+                  purgedCount++;
+                  console.log(`Purged deleted incident: ${userId}/${incidentId}`);
+                })
+                .catch(err => console.warn(`Failed to purge ${userId}/${incidentId}:`, err))
+            );
+          }
+        }
+      });
+    });
+
+    if (updates.length > 0) await Promise.all(updates);
+    return { purged: purgedCount };
+  } catch (e) {
+    console.error('purgeDeletedIncidents error:', e);
+    return { purged: 0, error: e.message };
+  }
+});
