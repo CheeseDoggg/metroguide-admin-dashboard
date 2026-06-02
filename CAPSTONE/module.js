@@ -754,7 +754,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebas
           image: h.data.imagefile || null,
           timestamp: (Number.isFinite(h.tsNum)
             ? new Date(h.tsNum).toLocaleString()
-            : (h.data.timestamp ? (isNaN(new Date(h.data.timestamp).getTime()) ? 'N/A' : new Date(h.data.timestamp).toLocaleString()) : 'N/A'))
+            : (h.data.timestamp ? (isNaN(new Date(h.data.timestamp).getTime()) ? 'N/A' : new Date(h.data.timestamp).toLocaleString()) : 'N/A')),
+          userId: h.userId,
+          incidentId: h.incidentId
         }));
 
         // Render with current UI filters instead of raw list
@@ -802,10 +804,16 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebas
         return;
       }
       filtered.sort((a,b)=>(Number.isFinite(b.tsNum)?b.tsNum:-Infinity)-(Number.isFinite(a.tsNum)?a.tsNum:-Infinity));
-      filtered.forEach(r => {
+      filtered.forEach((r, idx) => {
         const color = r.status.toLowerCase() === 'verified' ? '#4caf50' : '#f44336';
         const imgHtml = buildImageCell(r.image, `history/${r.username}/${r.tsNum||''}`);
         const tr = document.createElement('tr');
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'btn btn-reject';
+        deleteBtn.textContent = 'Delete';
+        deleteBtn.dataset.userId = r.userId;
+        deleteBtn.dataset.incidentId = r.incidentId;
+        deleteBtn.addEventListener('click', () => deleteHistoryReport(r.userId, r.incidentId));
         tr.innerHTML = `
           <td>${r.location}</td>
           <td class="description-cell">${r.description}</td>
@@ -815,7 +823,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebas
           <td>${r.timestamp}</td>
           <td style="color:${color};font-weight:bold;">${r.status}</td>
           <td>${imgHtml}</td>
-          <td><!-- actions optional --></td>`;
+          <td></td>`;
+        tr.cells[8].appendChild(deleteBtn);
         table.appendChild(tr);
       });
       const hs = document.getElementById('historyStatus');
@@ -1707,6 +1716,21 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebas
         .then(() => alert('SOS entry marked as deleted.'))
         .catch(err => alert('Error deleting SOS entry: ' + err.message));
     }
+
+    // Delete history/incident report
+    function deleteHistoryReport(userId, incidentId) {
+      if (!confirm('Are you sure you want to delete this report? This will also delete it from the mobile app.')) {
+        return;
+      }
+      const refToDelete = ref(db, `incidents/${userId}/${incidentId}`);
+      update(refToDelete, { rdInc_status: 'deleted' })
+        .then(() => {
+          alert('Report deleted successfully!');
+          loadHistory(); // Refresh the table
+        })
+        .catch(err => alert('Error deleting report: ' + err.message));
+    }
+
     document.getElementById("tabReports").addEventListener("click", () => {
   document.getElementById("tabSOS").classList.remove("active");
   document.getElementById("incidentReportsSection").style.display = "block";
