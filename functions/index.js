@@ -262,3 +262,179 @@ exports.expireVerifiedIncidents = onSchedule({ schedule: 'every 5 minutes', time
     return null;
   }
 });
+
+// Helper: Calculate haversine distance in meters
+function haversineMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371000; // Earth radius in meters
+  const toRad = (x) => x * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+}
+
+// Helper: Extract latitude from incident data
+function extractLat(data) {
+  if (!data) return null;
+  const candidates = [
+    data.lat, data.latitude, data.Latitude,
+    data.latlng?.lat, data.latLng?.lat, data.LatLng?.lat,
+    data.location?.lat, data.coords?.lat, data.position?.lat,
+    data.gps_lat, data.gpsLat
+  ];
+  for (const c of candidates) {
+    const v = Number(c);
+    if (Number.isFinite(v)) return v;
+  }
+  return null;
+}
+
+// Helper: Extract longitude from incident data
+function extractLng(data) {
+  if (!data) return null;
+  const candidates = [
+    data.lng, data.longitude, data.Longitude,
+    data.latlng?.lng, data.latLng?.lng, data.LatLng?.lng,
+    data.location?.lng, data.coords?.lng, data.position?.lng,
+    data.gps_lng, data.gpsLng
+  ];
+  for (const c of candidates) {
+    const v = Number(c);
+    if (Number.isFinite(v)) return v;
+  }
+  return null;
+}
+
+// Auto-verify clustered incidents: 5+ reports within 200m, same category, within 2 hours
+const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+const CLUSTER_RADIUS_METERS = 200;
+const MIN_REPORTS_FOR_AUTO_VERIFY = 5;
+
+exports.autoVerifyClusteredIncidents = onSchedule({ schedule: 'every 5 minutes', timeZone: 'Asia/Manila' }, async () => {
+  const now = Date.now();
+  const db = rtdb;
+  
+  try {
+    const rootSnap = await db.ref('incidents').get();
+    if (!rootSnap.exists()) return { autoVerified: 0 };
+
+    // Collect all pending incidents with valid coordinates
+    const pendingIncidents = [];
+    rootSnap.forEach((userSnap) => {
+      const userId = userSnap.key;
+      userSnap.forEach((incSnap) => {
+        const incidentId = incSnap.key;
+        const data = incSnap.val() || {};
+        const status = String(data.rdInc_status || '').toLowerCase();
+        
+        // Skip if already verified, rejected, or deleted
+        if (status === 'verified' || status === 'rejected' || status === 'deleted') return;
+        
+        const lat = extractLat(data);
+        const lng = extractLng(data);
+        const tsNum = normalizeTimestamp(data.timestamp) || normalizeTimestamp(data.createdAt) || now;
+        const category = String(data.category || '').trim().toLowerCase();
+        
+        // Must have coordinates and category
+        if (Number.isFinite(lat) && Number.isFinite(lng) && category) {
+          pendingIncidents.push({
+            userId,
+            incidentId,
+            data,
+            lat,
+            lng,
+            tsNum,
+            category
+          });
+        }
+      });
+    });
+
+    if (pendingIncidents.length < MIN_REPORTS_FOR_AUTO_VERIFY) {
+      return { autoVerified: 0, pendingCount: pendingIncidents.length };
+    }
+
+    // Simple DBSCAN-like clustering
+    const visited = new Set();
+    const clusters = [];
+
+    for (let i = 0; i < pendingIncidents.length; i++) {
+      if (visited.has(i)) continue;
+      
+      const seed = pendingIncidents[i];
+      const neighbors = [];
+      
+      // Find all neighbors within 200m, same category, within 2 hours
+      for (let j = 0; j < pendingIncidents.length; j++) {
+        if (i === j || visited.has(j)) continue;
+        const other = pendingIncidents[j];
+        
+        // Check category
+        if (seed.category !== other.category) continue;
+        
+        // Check time window
+        if (Math.abs(seed.tsNum - other.tsNum) > TWO_HOURS_MS) continue;
+        
+        // Check distance
+        const dist = haversineMeters(seed.lat, seed.lng, other.lat, other.lng);
+        if (dist <= CLUSTER_RADIUS_METERS) {
+          neighbors.push(j);
+        }
+      }
+
+      // If cluster has enough reports (including seed), mark for auto-verification
+      if (neighbors.length + 1 >= MIN_REPORTS_FOR_AUTO_VERIFY) {
+        const clusterMembers = [i, ...neighbors];
+        clusters.push(clusterMembers);
+        clusterMembers.forEach(idx => visited.add(idx));
+      } else {
+        visited.add(i);
+      }
+    }
+
+    // Auto-verify all clusters that meet criteria
+    let autoVerifiedCount = 0;
+    const updates = [];
+
+    for (const clusterMembers of clusters) {
+      for (const idx of clusterMembers) {
+        const incident = pendingIncidents[idx];
+        const updateData = {
+          rdInc_status: 'Verified',
+          autoVerifiedAt: now,
+          autoVerifiedReason: `Auto-verified: ${clusterMembers.length} reports within 200m, category: ${incident.category}, within 2 hours`,
+          moderatedBy: 'system-auto-verify',
+          moderatedAt: now,
+          verifiedBy: 'system-auto-verify',
+          verifiedAt: now
+        };
+
+        updates.push(
+          db.ref(`incidents/${incident.userId}/${incident.incidentId}`).update(updateData)
+            .then(() => {
+              autoVerifiedCount++;
+              // Log auto-verification (best-effort)
+              return db.ref('moderation_logs').push({
+                incidentUser: incident.userId,
+                incidentId: incident.incidentId,
+                action: 'Verified',
+                previousStatus: incident.data.rdInc_status || 'Pending',
+                moderatorUid: 'system-auto-verify',
+                moderatorEmail: 'system@auto-verify',
+                at: now,
+                reason: `Auto-verified: cluster of ${clusterMembers.length} reports`
+              }).catch(() => null); // logging is best-effort
+            })
+            .catch(err => console.warn(`Failed to auto-verify ${incident.userId}/${incident.incidentId}:`, err))
+        );
+      }
+    }
+
+    if (updates.length > 0) await Promise.all(updates);
+    return { autoVerified: autoVerifiedCount, clustersFound: clusters.length };
+  } catch (e) {
+    console.error('autoVerifyClusteredIncidents error:', e);
+    return { autoVerified: 0, error: e.message };
+  }
+});
