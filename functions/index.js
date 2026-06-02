@@ -393,42 +393,54 @@ exports.autoVerifyClusteredIncidents = onSchedule({ schedule: 'every 5 minutes',
       }
     }
 
-    // Auto-verify all clusters that meet criteria
+    // Auto-verify only the latest report in each cluster
     let autoVerifiedCount = 0;
     const updates = [];
 
     for (const clusterMembers of clusters) {
-      for (const idx of clusterMembers) {
-        const incident = pendingIncidents[idx];
-        const updateData = {
-          rdInc_status: 'Verified',
-          autoVerifiedAt: now,
-          autoVerifiedReason: `Auto-verified: ${clusterMembers.length} reports within 200m, category: ${incident.category}, within 2 hours`,
-          moderatedBy: 'system-auto-verify',
-          moderatedAt: now,
-          verifiedBy: 'system-auto-verify',
-          verifiedAt: now
-        };
-
-        updates.push(
-          db.ref(`incidents/${incident.userId}/${incident.incidentId}`).update(updateData)
-            .then(() => {
-              autoVerifiedCount++;
-              // Log auto-verification (best-effort)
-              return db.ref('moderation_logs').push({
-                incidentUser: incident.userId,
-                incidentId: incident.incidentId,
-                action: 'Verified',
-                previousStatus: incident.data.rdInc_status || 'Pending',
-                moderatorUid: 'system-auto-verify',
-                moderatorEmail: 'system@auto-verify',
-                at: now,
-                reason: `Auto-verified: cluster of ${clusterMembers.length} reports`
-              }).catch(() => null); // logging is best-effort
-            })
-            .catch(err => console.warn(`Failed to auto-verify ${incident.userId}/${incident.incidentId}:`, err))
-        );
+      // Find the latest report in the cluster
+      let latestIdx = clusterMembers[0];
+      let latestTime = pendingIncidents[clusterMembers[0]].tsNum;
+      
+      for (let i = 1; i < clusterMembers.length; i++) {
+        const idx = clusterMembers[i];
+        const tsNum = pendingIncidents[idx].tsNum;
+        if (tsNum > latestTime) {
+          latestTime = tsNum;
+          latestIdx = idx;
+        }
       }
+      
+      // Verify only the latest report
+      const latestIncident = pendingIncidents[latestIdx];
+      const updateData = {
+        rdInc_status: 'Verified',
+        autoVerifiedAt: now,
+        autoVerifiedReason: `Auto-verified: latest of ${clusterMembers.length} reports within 200m, category: ${latestIncident.category}, within 2 hours`,
+        moderatedBy: 'system-auto-verify',
+        moderatedAt: now,
+        verifiedBy: 'system-auto-verify',
+        verifiedAt: now
+      };
+
+      updates.push(
+        db.ref(`incidents/${latestIncident.userId}/${latestIncident.incidentId}`).update(updateData)
+          .then(() => {
+            autoVerifiedCount++;
+            // Log auto-verification (best-effort)
+            return db.ref('moderation_logs').push({
+              incidentUser: latestIncident.userId,
+              incidentId: latestIncident.incidentId,
+              action: 'Verified',
+              previousStatus: latestIncident.data.rdInc_status || 'Pending',
+              moderatorUid: 'system-auto-verify',
+              moderatorEmail: 'system@auto-verify',
+              at: now,
+              reason: `Auto-verified: latest of ${clusterMembers.length} reports in proximity cluster (200m)`
+            }).catch(() => null); // logging is best-effort
+          })
+          .catch(err => console.warn(`Failed to auto-verify ${latestIncident.userId}/${latestIncident.incidentId}:`, err))
+      );
     }
 
     if (updates.length > 0) await Promise.all(updates);
