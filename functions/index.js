@@ -376,6 +376,11 @@ exports.autoVerifyClusteredIncidents = onSchedule({ schedule: 'every 5 minutes',
 
     console.log(`[autoVerifyClusteredIncidents] Total incidents: ${totalIncidents}, Pending: ${pendingIncidents.length}, Min required: ${MIN_REPORTS_FOR_AUTO_VERIFY}`);
 
+    // Debug: Log all pending incidents with their coordinates
+    pendingIncidents.forEach((inc, idx) => {
+      console.log(`[autoVerifyClusteredIncidents] Pending[${idx}]: lat=${inc.lat}, lng=${inc.lng}, category="${inc.category}", timestamp=${new Date(inc.tsNum).toISOString()}`);
+    });
+
     if (pendingIncidents.length < MIN_REPORTS_FOR_AUTO_VERIFY) {
       console.log(`[autoVerifyClusteredIncidents] Not enough pending incidents (${pendingIncidents.length} < ${MIN_REPORTS_FOR_AUTO_VERIFY})`);
       return { autoVerified: 0, pendingCount: pendingIncidents.length };
@@ -397,15 +402,23 @@ exports.autoVerifyClusteredIncidents = onSchedule({ schedule: 'every 5 minutes',
         const other = pendingIncidents[j];
         
         // Check category
-        if (seed.category !== other.category) continue;
+        if (seed.category !== other.category) {
+          continue;
+        }
         
         // Check time window
-        if (Math.abs(seed.tsNum - other.tsNum) > TWO_HOURS_MS) continue;
+        if (Math.abs(seed.tsNum - other.tsNum) > TWO_HOURS_MS) {
+          continue;
+        }
         
         // Check distance
         const dist = haversineMeters(seed.lat, seed.lng, other.lat, other.lng);
+        console.log(`[autoVerifyClusteredIncidents] Distance between incident ${i} and ${j}: ${dist.toFixed(2)}m (threshold: ${CLUSTER_RADIUS_METERS}m)`);
         if (dist <= CLUSTER_RADIUS_METERS) {
           neighbors.push(j);
+          console.log(`[autoVerifyClusteredIncidents]   ✓ Added as neighbor`);
+        } else {
+          console.log(`[autoVerifyClusteredIncidents]   ✗ Too far, not a neighbor`);
         }
       }
 
@@ -416,6 +429,7 @@ exports.autoVerifyClusteredIncidents = onSchedule({ schedule: 'every 5 minutes',
         clusterMembers.forEach(idx => visited.add(idx));
         console.log(`[autoVerifyClusteredIncidents] Found cluster with ${clusterMembers.length} reports, category: ${seed.category}`);
       } else {
+        console.log(`[autoVerifyClusteredIncidents] Incident ${i}: Only ${neighbors.length + 1} reports in cluster (need ${MIN_REPORTS_FOR_AUTO_VERIFY})`);
         visited.add(i);
       }
     }
