@@ -369,9 +369,13 @@ exports.autoVerifyClusteredIncidents = onSchedule({ schedule: 'every 5 minutes',
     });
 
     // Collect ONLY pending incidents (not rejected or deleted)
-    const pendingIncidents = allIncidents.filter(inc => {
+    const pendingIncidents = allIncidents.filter((inc, idx) => {
       const status = String(inc.data.rdInc_status || '').toLowerCase();
-      return status !== 'verified' && status !== 'rejected' && status !== 'deleted';
+      const isPending = status !== 'verified' && status !== 'rejected' && status !== 'deleted';
+      if (idx < 5) {
+        console.log(`[autoVerifyClusteredIncidents] Filter check [${idx}]: status="${status}", isPending=${isPending}`);
+      }
+      return isPending;
     });
 
     console.log(`[autoVerifyClusteredIncidents] Total incidents: ${totalIncidents}, Pending: ${pendingIncidents.length}, Min required: ${MIN_REPORTS_FOR_AUTO_VERIFY}`);
