@@ -424,24 +424,29 @@ exports.autoVerifyClusteredIncidents = onSchedule({ schedule: 'every 5 minutes',
 
     // Auto-verify only the latest report in each cluster
     // BUT: Skip clusters that already have a verified incident (cluster is locked)
+    // PRIORITY: Prefer reports WITH picture, then most recent overall
     let autoVerifiedCount = 0;
     const updates = [];
 
     for (const clusterMembers of clusters) {
-      // Find the latest report in the cluster
-      let latestIdx = clusterMembers[0];
-      let latestTime = pendingIncidents[clusterMembers[0]].tsNum;
+      // Get all members with their picture status
+      const membersWithStatus = clusterMembers.map(idx => ({
+        idx,
+        incident: pendingIncidents[idx],
+        hasPicture: !!(pendingIncidents[idx].data.imagefile && String(pendingIncidents[idx].data.imagefile).trim()),
+        timestamp: pendingIncidents[idx].tsNum
+      }));
       
-      for (let i = 1; i < clusterMembers.length; i++) {
-        const idx = clusterMembers[i];
-        const tsNum = pendingIncidents[idx].tsNum;
-        if (tsNum > latestTime) {
-          latestTime = tsNum;
-          latestIdx = idx;
+      // Sort by: has picture (desc), then by timestamp (desc - most recent first)
+      membersWithStatus.sort((a, b) => {
+        if (a.hasPicture !== b.hasPicture) {
+          return a.hasPicture ? -1 : 1; // reports with pictures first
         }
-      }
+        return b.timestamp - a.timestamp; // most recent first
+      });
       
-      const latestIncident = pendingIncidents[latestIdx];
+      const selectedMember = membersWithStatus[0];
+      const latestIncident = selectedMember.incident;
       
       // Check if this cluster already has a verified incident
       const clusterKey = `${latestIncident.lat.toFixed(6)}_${latestIncident.lng.toFixed(6)}_${latestIncident.category}`;
@@ -451,11 +456,12 @@ exports.autoVerifyClusteredIncidents = onSchedule({ schedule: 'every 5 minutes',
         continue;
       }
       
-      // Verify only the latest report in this cluster
+      // Verify the selected report in this cluster
+      const pictureNote = selectedMember.hasPicture ? ' (with picture)' : ' (no picture, selected as most recent)';
       const updateData = {
         rdInc_status: 'Verified',
         autoVerifiedAt: now,
-        autoVerifiedReason: `Auto-verified: latest of ${clusterMembers.length} reports within 200m, category: ${latestIncident.category}, within 2 hours. Cluster locked.`,
+        autoVerifiedReason: `Auto-verified: ${selectedMember.hasPicture ? 'latest with picture' : 'latest'} of ${clusterMembers.length} reports within 200m, category: ${latestIncident.category}, within 2 hours. Cluster locked.${pictureNote}`,
         moderatedBy: 'system-auto-verify',
         moderatedAt: now,
         verifiedBy: 'system-auto-verify',
@@ -476,7 +482,7 @@ exports.autoVerifyClusteredIncidents = onSchedule({ schedule: 'every 5 minutes',
               moderatorUid: 'system-auto-verify',
               moderatorEmail: 'system@auto-verify',
               at: now,
-              reason: `Auto-verified: latest of ${clusterMembers.length} reports in proximity cluster (200m). Cluster now locked.`
+              reason: `Auto-verified: ${selectedMember.hasPicture ? 'latest with picture' : 'latest'} of ${clusterMembers.length} reports in proximity cluster (200m). Cluster now locked.`
             }).catch(() => null); // logging is best-effort
           })
           .catch(err => console.warn(`Failed to auto-verify ${latestIncident.userId}/${latestIncident.incidentId}:`, err))
