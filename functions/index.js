@@ -307,6 +307,7 @@ function extractLng(data) {
 }
 
 // Auto-verify clustered incidents: 5+ reports within 200m, same category, within 2 hours
+// Once a cluster is verified, subsequent reports in that cluster will NOT be verified
 const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
 const CLUSTER_RADIUS_METERS = 200;
 const MIN_REPORTS_FOR_AUTO_VERIFY = 5;
@@ -319,17 +320,16 @@ exports.autoVerifyClusteredIncidents = onSchedule({ schedule: 'every 5 minutes',
     const rootSnap = await db.ref('incidents').get();
     if (!rootSnap.exists()) return { autoVerified: 0 };
 
-    // Collect all pending incidents with valid coordinates
-    const pendingIncidents = [];
+    // Collect all incidents with valid coordinates (including verified ones to identify locked clusters)
+    const allIncidents = [];
+    const verifiedIncidents = new Set(); // track which clusters are already verified
+    
     rootSnap.forEach((userSnap) => {
       const userId = userSnap.key;
       userSnap.forEach((incSnap) => {
         const incidentId = incSnap.key;
         const data = incSnap.val() || {};
         const status = String(data.rdInc_status || '').toLowerCase();
-        
-        // Skip if already verified, rejected, or deleted
-        if (status === 'verified' || status === 'rejected' || status === 'deleted') return;
         
         const lat = extractLat(data);
         const lng = extractLng(data);
@@ -338,17 +338,29 @@ exports.autoVerifyClusteredIncidents = onSchedule({ schedule: 'every 5 minutes',
         
         // Must have coordinates and category
         if (Number.isFinite(lat) && Number.isFinite(lng) && category) {
-          pendingIncidents.push({
+          allIncidents.push({
             userId,
             incidentId,
             data,
             lat,
             lng,
             tsNum,
-            category
+            category,
+            status
           });
+          
+          // Mark verified incidents (they indicate a locked cluster)
+          if (status === 'verified') {
+            verifiedIncidents.add(`${lat.toFixed(6)}_${lng.toFixed(6)}_${category}`);
+          }
         }
       });
+    });
+
+    // Collect ONLY pending incidents (not rejected or deleted)
+    const pendingIncidents = allIncidents.filter(inc => {
+      const status = String(inc.data.rdInc_status || '').toLowerCase();
+      return status !== 'verified' && status !== 'rejected' && status !== 'deleted';
     });
 
     if (pendingIncidents.length < MIN_REPORTS_FOR_AUTO_VERIFY) {
@@ -394,6 +406,7 @@ exports.autoVerifyClusteredIncidents = onSchedule({ schedule: 'every 5 minutes',
     }
 
     // Auto-verify only the latest report in each cluster
+    // BUT: Skip clusters that already have a verified incident (cluster is locked)
     let autoVerifiedCount = 0;
     const updates = [];
 
@@ -411,16 +424,26 @@ exports.autoVerifyClusteredIncidents = onSchedule({ schedule: 'every 5 minutes',
         }
       }
       
-      // Verify only the latest report
       const latestIncident = pendingIncidents[latestIdx];
+      
+      // Check if this cluster already has a verified incident
+      const clusterKey = `${latestIncident.lat.toFixed(6)}_${latestIncident.lng.toFixed(6)}_${latestIncident.category}`;
+      if (verifiedIncidents.has(clusterKey)) {
+        // Cluster already locked; do not verify new reports
+        console.log(`Skipping cluster ${clusterKey}: already has 1 verified incident`);
+        continue;
+      }
+      
+      // Verify only the latest report in this cluster
       const updateData = {
         rdInc_status: 'Verified',
         autoVerifiedAt: now,
-        autoVerifiedReason: `Auto-verified: latest of ${clusterMembers.length} reports within 200m, category: ${latestIncident.category}, within 2 hours`,
+        autoVerifiedReason: `Auto-verified: latest of ${clusterMembers.length} reports within 200m, category: ${latestIncident.category}, within 2 hours. Cluster locked.`,
         moderatedBy: 'system-auto-verify',
         moderatedAt: now,
         verifiedBy: 'system-auto-verify',
-        verifiedAt: now
+        verifiedAt: now,
+        clusterLocked: true // Mark cluster as locked
       };
 
       updates.push(
@@ -436,7 +459,7 @@ exports.autoVerifyClusteredIncidents = onSchedule({ schedule: 'every 5 minutes',
               moderatorUid: 'system-auto-verify',
               moderatorEmail: 'system@auto-verify',
               at: now,
-              reason: `Auto-verified: latest of ${clusterMembers.length} reports in proximity cluster (200m)`
+              reason: `Auto-verified: latest of ${clusterMembers.length} reports in proximity cluster (200m). Cluster now locked.`
             }).catch(() => null); // logging is best-effort
           })
           .catch(err => console.warn(`Failed to auto-verify ${latestIncident.userId}/${latestIncident.incidentId}:`, err))
