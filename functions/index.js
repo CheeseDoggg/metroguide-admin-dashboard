@@ -189,14 +189,37 @@ exports.moderateIncident = onCall(async (req) => {
       if (prevSnap.exists()) prev = prevSnap.val() || {};
     } catch (_) { /* ignore */ }
 
-    await db.ref(refPath).update({
-      rdInc_status: String(status),
-      moderatedBy: callerUid,
-      moderatedAt: now,
-      // legacy compatibility
-      verifiedBy: callerUid,
-      verifiedAt: now,
-    });
+    // Handle soft-delete: move to archived_incidents instead of removing
+    if (String(status).toLowerCase() === 'deleted') {
+      // Copy to archived_incidents
+      const archivedIncident = {
+        ...prev,
+        rdInc_status: 'deleted',
+        deletedAt: now,
+        deletedBy: callerUid,
+        moderatedBy: callerUid,
+        moderatedAt: now
+      };
+      await db.ref(`archived_incidents/${userId}/${incidentId}`).set(archivedIncident);
+      // Update original to mark as deleted
+      await db.ref(refPath).update({
+        rdInc_status: 'deleted',
+        deletedAt: now,
+        deletedBy: callerUid,
+        moderatedBy: callerUid,
+        moderatedAt: now
+      });
+    } else {
+      // Normal moderation (verify/reject)
+      await db.ref(refPath).update({
+        rdInc_status: String(status),
+        moderatedBy: callerUid,
+        moderatedAt: now,
+        // legacy compatibility
+        verifiedBy: callerUid,
+        verifiedAt: now,
+      });
+    }
 
     // Write moderation log (best-effort)
     try {
@@ -208,6 +231,7 @@ exports.moderateIncident = onCall(async (req) => {
         moderatorUid: callerUid,
         moderatorEmail: email,
         at: now,
+        details: String(status).toLowerCase() === 'deleted' ? 'Soft-deleted: moved to archived_incidents' : null
       });
     } catch (e) {
       // logging is best-effort; do not fail the call
@@ -639,96 +663,10 @@ exports.autoVerifyClusteredIncidents = onSchedule({ schedule: 'every 5 minutes',
   }
 });
 
-// Automatically purge incident reports marked as deleted after 2 hours
-exports.purgeDeletedIncidents = onSchedule({ schedule: 'every 1 minutes', timeZone: 'Asia/Manila' }, async () => {
-  try {
-    const now = Date.now();
-    const TWO_HOURS_MS = 2 * 60 * 60 * 1000; // 2 hours in milliseconds
-    let purgedCount = 0;
-
-    // Scan all incidents
-    const incidentsSnapshot = await rtdb.ref('incidents').get();
-    if (!incidentsSnapshot.exists()) {
-      return { purged: 0 };
-    }
-
-    const allIncidents = incidentsSnapshot.val();
-    const updates = [];
-
-    // Iterate through all users and their incidents
-    Object.keys(allIncidents).forEach(userId => {
-      const userIncidents = allIncidents[userId];
-      if (!userIncidents || typeof userIncidents !== 'object') return;
-
-      Object.keys(userIncidents).forEach(incidentId => {
-        const incident = userIncidents[incidentId];
-        if (!incident || typeof incident !== 'object') return;
-
-        // Check if incident is marked as deleted
-        if (incident.rdInc_status === 'deleted' && incident.deletedAt) {
-          const deletedAt = normalizeTimestamp(incident.deletedAt);
-          if (deletedAt && (now - deletedAt) >= TWO_HOURS_MS) {
-            // Purge this incident
-            updates.push(
-              rtdb.ref(`incidents/${userId}/${incidentId}`).remove()
-                .then(() => {
-                  purgedCount++;
-                  console.log(`Purged deleted incident: ${userId}/${incidentId}`);
-                })
-                .catch(err => console.warn(`Failed to purge ${userId}/${incidentId}:`, err))
-            );
-          }
-        }
-      });
-    });
-
-    if (updates.length > 0) await Promise.all(updates);
-    return { purged: purgedCount };
-  } catch (e) {
-    console.error('purgeDeletedIncidents error:', e);
-    return { purged: 0, error: e.message };
-  }
+// Keep deleted incidents in database indefinitely (soft-delete)
+// They are moved to archived_incidents and marked with status='deleted'
+exports.purgeDeletedIncidents = onSchedule({ schedule: 'every 24 hours', timeZone: 'Asia/Manila' }, async () => {
+  console.log('Soft-delete policy: deleted incidents are permanently retained in archived_incidents.');
+  return { message: 'soft-delete policy enforced' };
 });
 
-// One-time cleanup: Remove all incidents with status='deleted' (legacy from old deletion method)
-exports.cleanupOldDeletedIncidents = onSchedule({ schedule: 'every 1 minutes', timeZone: 'Asia/Manila' }, async () => {
-  try {
-    const incidentsSnapshot = await rtdb.ref('incidents').get();
-    if (!incidentsSnapshot.exists()) {
-      return { cleaned: 0 };
-    }
-
-    const allIncidents = incidentsSnapshot.val();
-    const updates = [];
-    let cleanedCount = 0;
-
-    // Iterate through all users and their incidents
-    Object.keys(allIncidents).forEach(userId => {
-      const userIncidents = allIncidents[userId];
-      if (!userIncidents || typeof userIncidents !== 'object') return;
-
-      Object.keys(userIncidents).forEach(incidentId => {
-        const incident = userIncidents[incidentId];
-        if (!incident || typeof incident !== 'object') return;
-
-        // Remove any incident with status='deleted' (old deletion method)
-        if (incident.rdInc_status === 'deleted') {
-          updates.push(
-            rtdb.ref(`incidents/${userId}/${incidentId}`).remove()
-              .then(() => {
-                cleanedCount++;
-                console.log(`Cleaned up deleted incident: ${userId}/${incidentId}`);
-              })
-              .catch(err => console.warn(`Failed to clean ${userId}/${incidentId}:`, err))
-          );
-        }
-      });
-    });
-
-    if (updates.length > 0) await Promise.all(updates);
-    return { cleaned: cleanedCount };
-  } catch (e) {
-    console.error('cleanupOldDeletedIncidents error:', e);
-    return { cleaned: 0, error: e.message };
-  }
-});
