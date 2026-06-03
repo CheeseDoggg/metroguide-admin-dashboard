@@ -218,8 +218,6 @@ exports.moderateIncident = onCall(async (req) => {
 });
 
 // Scheduled cleanup: remove Verified or Rejected incidents after 3 hours
-const THREE_HOURS_MS = 3 * 60 * 60 * 1000;
-
 exports.expireVerifiedIncidents = onSchedule({ schedule: 'every 5 minutes', timeZone: 'Asia/Manila' }, async () => {
   const now = Date.now();
   const db = rtdb;
@@ -245,7 +243,7 @@ exports.expireVerifiedIncidents = onSchedule({ schedule: 'every 5 minutes', time
           || null;
         if (!basisTs) return; // no reliable timestamp; skip to avoid accidental deletions
 
-        if ((now - basisTs) >= TWO_HOURS_MS) {
+        if ((now - basisTs) >= THREE_HOURS_MS_EXPIRE) {
           // Archive then remove
           const incidentRef = db.ref(`incidents/${userId}/${incidentId}`);
           const archiveRef = db.ref(`archived_incidents/${userId}/${incidentId}`);
@@ -274,34 +272,121 @@ function haversineMeters(lat1, lon1, lat2, lon2) {
   return R * c;
 }
 
-// Helper: Extract latitude from incident data
+// Helper: Extract latitude from incident data (matches frontend pickLat)
 function extractLat(data) {
-  if (!data) return null;
+  if (!data || typeof data !== 'object') return null;
+  
+  function toNum(n) {
+    const v = Number(n);
+    return Number.isFinite(v) ? v : null;
+  }
+  
+  function parseLatLngString(s) {
+    if (!s || typeof s !== 'string') return { lat: null };
+    const parts = s.split(/[ ,]+/).filter(Boolean);
+    if (parts.length < 1) return { lat: null };
+    return { lat: toNum(parts[0]) };
+  }
+  
+  // Combined string/object latlng fields
+  if (typeof data.latlng === 'string') {
+    const p = parseLatLngString(data.latlng);
+    if (p.lat != null) return p.lat;
+  }
+  if (typeof data.latLng === 'string') {
+    const p = parseLatLngString(data.latLng);
+    if (p.lat != null) return p.lat;
+  }
+  if (typeof data.LatLng === 'string') {
+    const p = parseLatLngString(data.LatLng);
+    if (p.lat != null) return p.lat;
+  }
+  if (data.latlng && typeof data.latlng === 'object') {
+    const v = toNum(data.latlng.lat ?? data.latlng.latitude);
+    if (v != null) return v;
+  }
+  if (data.latLng && typeof data.latLng === 'object') {
+    const v = toNum(data.latLng.lat ?? data.latLng.latitude);
+    if (v != null) return v;
+  }
+  if (data.LatLng && typeof data.LatLng === 'object') {
+    const v = toNum(data.LatLng.lat ?? data.LatLng.latitude);
+    if (v != null) return v;
+  }
+  
   const candidates = [
-    data.lat, data.latitude, data.Latitude,
-    data.latlng?.lat, data.latLng?.lat, data.LatLng?.lat,
-    data.location?.lat, data.coords?.lat, data.position?.lat,
-    data.gps_lat, data.gpsLat
+    data.lat, data.latitude, data.Latitude, data.LAT, data.Lat, data.LATITUDE,
+    data.location?.lat, data.location?.latitude,
+    data.coords?.lat, data.coords?.latitude,
+    data.coord?.lat, data.coord?.latitude,
+    data.position?.lat, data.position?.latitude,
+    data.geo?.lat, data.geo?.latitude,
+    data.gps_lat, data.gpsLat, data.gpsLatitude,
+    data.latLong?.lat, data.latlong?.lat, data.LatLong?.lat
   ];
   for (const c of candidates) {
-    const v = Number(c);
-    if (Number.isFinite(v)) return v;
+    const v = toNum(c);
+    if (v != null) return v;
   }
   return null;
 }
 
-// Helper: Extract longitude from incident data
+// Helper: Extract longitude from incident data (matches frontend pickLng)
 function extractLng(data) {
-  if (!data) return null;
+  if (!data || typeof data !== 'object') return null;
+  
+  function toNum(n) {
+    const v = Number(n);
+    return Number.isFinite(v) ? v : null;
+  }
+  
+  function parseLatLngString(s) {
+    if (!s || typeof s !== 'string') return { lng: null };
+    const parts = s.split(/[ ,]+/).filter(Boolean);
+    if (parts.length < 2) return { lng: null };
+    return { lng: toNum(parts[1]) };
+  }
+  
+  // Combined string/object latlng fields
+  if (typeof data.latlng === 'string') {
+    const p = parseLatLngString(data.latlng);
+    if (p.lng != null) return p.lng;
+  }
+  if (typeof data.latLng === 'string') {
+    const p = parseLatLngString(data.latLng);
+    if (p.lng != null) return p.lng;
+  }
+  if (typeof data.LatLng === 'string') {
+    const p = parseLatLngString(data.LatLng);
+    if (p.lng != null) return p.lng;
+  }
+  if (data.latlng && typeof data.latlng === 'object') {
+    const v = toNum(data.latlng.lng ?? data.latlng.longitude);
+    if (v != null) return v;
+  }
+  if (data.latLng && typeof data.latLng === 'object') {
+    const v = toNum(data.latLng.lng ?? data.latLng.longitude);
+    if (v != null) return v;
+  }
+  if (data.LatLng && typeof data.LatLng === 'object') {
+    const v = toNum(data.LatLng.lng ?? data.LatLng.longitude);
+    if (v != null) return v;
+  }
+  
   const candidates = [
-    data.lng, data.longitude, data.Longitude,
-    data.latlng?.lng, data.latLng?.lng, data.LatLng?.lng,
-    data.location?.lng, data.coords?.lng, data.position?.lng,
-    data.gps_lng, data.gpsLng
+    data.lng, data.longitude, data.Longitude, data.LNG, data.lon, data.Lon, data.LONGITUDE,
+    data.location?.lng, data.location?.longitude,
+    data.coords?.lng, data.coords?.longitude,
+    data.coord?.lng, data.coord?.longitude,
+    data.position?.lng, data.position?.longitude,
+    data.geo?.lng, data.geo?.longitude,
+    data.gps_lng, data.gpsLng, data.gpsLongitude,
+    data.latLong?.lng, data.latlong?.lng, data.LatLong?.lng,
+    data.longtitude, data.Longtitude
   ];
   for (const c of candidates) {
-    const v = Number(c);
-    if (Number.isFinite(v)) return v;
+    const v = toNum(c);
+    if (v != null) return v;
   }
   return null;
 }
@@ -309,8 +394,24 @@ function extractLng(data) {
 // Auto-verify clustered incidents: 5+ reports within 200m, same category, within 2 hours
 // Once a cluster is verified, subsequent reports in that cluster will NOT be verified
 const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+const THREE_HOURS_MS_EXPIRE = 3 * 60 * 60 * 1000;
 const CLUSTER_RADIUS_METERS = 200;
 const MIN_REPORTS_FOR_AUTO_VERIFY = 5;
+
+// Helper: Check if incident has an image
+function hasImage(data) {
+  if (!data || typeof data !== 'object') return false;
+  // Check multiple possible field names for images
+  const imageCandidates = [
+    data.imagefile, data.image, data.imagePath, data.photo, data.picture,
+    data.img, data.imageUrl, data.photoUrl, data.imageFile,
+    data.file, data.attachment, data.imageData
+  ];
+  for (const candidate of imageCandidates) {
+    if (candidate && String(candidate).trim()) return true;
+  }
+  return false;
+}
 
 exports.autoVerifyClusteredIncidents = onSchedule({ schedule: 'every 5 minutes', timeZone: 'Asia/Manila' }, async () => {
   const now = Date.now();
@@ -327,14 +428,13 @@ exports.autoVerifyClusteredIncidents = onSchedule({ schedule: 'every 5 minutes',
     const allIncidents = [];
     const verifiedIncidents = new Set(); // track which clusters are already verified
     let totalIncidents = 0;
-    let skippedIncidents = 0;
     
     rootSnap.forEach((userSnap) => {
       const userId = userSnap.key;
       userSnap.forEach((incSnap) => {
         const incidentId = incSnap.key;
         const data = incSnap.val() || {};
-        const status = String(data.rdInc_status || '').toLowerCase();
+        const status = String(data.rdInc_status || '').toLowerCase().trim();
         totalIncidents++;
         
         // Debug: Log first few incidents
@@ -366,17 +466,18 @@ exports.autoVerifyClusteredIncidents = onSchedule({ schedule: 'every 5 minutes',
           });
           
           // Mark verified incidents (they indicate a locked cluster)
-          if (status === 'verified') {
+          if (status === 'verified' || status === 'auto-verified') {
             verifiedIncidents.add(`${lat.toFixed(6)}_${lng.toFixed(6)}_${category}`);
           }
         }
       });
     });
 
-    // Collect ONLY pending incidents (not rejected or deleted)
+    // Collect ONLY pending incidents (not rejected, verified, or deleted)
     const pendingIncidents = allIncidents.filter((inc, idx) => {
-      const status = String(inc.data.rdInc_status || '').toLowerCase();
-      const isPending = status !== 'verified' && status !== 'rejected' && status !== 'deleted';
+      const status = String(inc.data.rdInc_status || '').toLowerCase().trim();
+      // Accept pending/unverified incidents (anything not explicitly verified/rejected/deleted)
+      const isPending = !['verified', 'rejected', 'deleted', 'auto-verified', 'archived'].includes(status);
       if (idx < 5) {
         console.log(`[autoVerifyClusteredIncidents] Filter check [${idx}]: status="${status}", isPending=${isPending}`);
       }
@@ -445,9 +546,11 @@ exports.autoVerifyClusteredIncidents = onSchedule({ schedule: 'every 5 minutes',
 
     console.log(`[autoVerifyClusteredIncidents] Total clusters found: ${clusters.length}`);
 
-    // Auto-verify only the latest report in each cluster
+    // Auto-verify reports in each cluster
+    // PRIORITY: 
+    // 1. If any report has an image, verify the LATEST one WITH an image
+    // 2. If none have images, verify ONLY the LATEST one
     // BUT: Skip clusters that already have a verified incident (cluster is locked)
-    // PRIORITY: Prefer reports WITH picture, then most recent overall
     let autoVerifiedCount = 0;
     const updates = [];
 
@@ -456,63 +559,79 @@ exports.autoVerifyClusteredIncidents = onSchedule({ schedule: 'every 5 minutes',
       const membersWithStatus = clusterMembers.map(idx => ({
         idx,
         incident: pendingIncidents[idx],
-        hasPicture: !!(pendingIncidents[idx].data.imagefile && String(pendingIncidents[idx].data.imagefile).trim()),
+        hasPicture: hasImage(pendingIncidents[idx].data),
         timestamp: pendingIncidents[idx].tsNum
       }));
       
-      // Sort by: has picture (desc), then by timestamp (desc - most recent first)
-      membersWithStatus.sort((a, b) => {
-        if (a.hasPicture !== b.hasPicture) {
-          return a.hasPicture ? -1 : 1; // reports with pictures first
-        }
-        return b.timestamp - a.timestamp; // most recent first
-      });
+      // Separate reports with and without pictures
+      const withPictures = membersWithStatus.filter(m => m.hasPicture);
+      const withoutPictures = membersWithStatus.filter(m => !m.hasPicture);
       
-      const selectedMember = membersWithStatus[0];
-      const latestIncident = selectedMember.incident;
+      // Sort both groups by timestamp (most recent first)
+      withPictures.sort((a, b) => b.timestamp - a.timestamp);
+      withoutPictures.sort((a, b) => b.timestamp - a.timestamp);
+      
+      let selectedMembers = [];
+      
+      // Rule 1: If any have pictures, verify ALL that have pictures (latest ones first)
+      if (withPictures.length > 0) {
+        // Verify all reports with pictures
+        selectedMembers = withPictures;
+        console.log(`[autoVerifyClusteredIncidents] Cluster with pictures: selecting ${selectedMembers.length} reports WITH pictures`);
+      } else if (withoutPictures.length > 0) {
+        // If no pictures, verify only the latest one
+        selectedMembers = [withoutPictures[0]];
+        console.log(`[autoVerifyClusteredIncidents] Cluster without pictures: selecting 1 report (latest)`);
+      }
       
       // Check if this cluster already has a verified incident
+      const latestIncident = selectedMembers[0]?.incident || pendingIncidents[clusterMembers[0]];
       const clusterKey = `${latestIncident.lat.toFixed(6)}_${latestIncident.lng.toFixed(6)}_${latestIncident.category}`;
       if (verifiedIncidents.has(clusterKey)) {
         // Cluster already locked; do not verify new reports
-        console.log(`Skipping cluster ${clusterKey}: already has 1 verified incident`);
+        console.log(`[autoVerifyClusteredIncidents] Skipping cluster ${clusterKey}: already has 1 verified incident`);
         continue;
       }
       
-      // Verify the selected report in this cluster
-      const pictureNote = selectedMember.hasPicture ? ' (with picture)' : ' (no picture, selected as most recent)';
-      const updateData = {
-        rdInc_status: 'Verified',
-        autoVerifiedAt: now,
-        autoVerifiedReason: `Auto-verified: ${selectedMember.hasPicture ? 'latest with picture' : 'latest'} of ${clusterMembers.length} reports within 200m, category: ${latestIncident.category}, within 2 hours. Cluster locked.${pictureNote}`,
-        moderatedBy: 'system-auto-verify',
-        moderatedAt: now,
-        verifiedBy: 'system-auto-verify',
-        verifiedAt: now,
-        clusterLocked: true // Mark cluster as locked
-      };
+      // Verify selected reports in this cluster
+      for (const selectedMember of selectedMembers) {
+        const incident = selectedMember.incident;
+        const pictureNote = selectedMember.hasPicture ? ' (with picture)' : ' (latest, no picture)';
+        const updateData = {
+          rdInc_status: 'Verified',
+          autoVerifiedAt: now,
+          autoVerifiedReason: `Auto-verified: ${selectedMember.hasPicture ? 'report with picture' : 'latest'} of ${clusterMembers.length} reports in proximity cluster (200m, ${incident.category}, within 2 hours). Cluster locked.${pictureNote}`,
+          moderatedBy: 'system-auto-verify',
+          moderatedAt: now,
+          verifiedBy: 'system-auto-verify',
+          verifiedAt: now,
+          clusterLocked: true // Mark cluster as locked
+        };
 
-      updates.push(
-        db.ref(`incidents/${latestIncident.userId}/${latestIncident.incidentId}`).update(updateData)
-          .then(() => {
-            autoVerifiedCount++;
-            // Log auto-verification (best-effort)
-            return db.ref('moderation_logs').push({
-              incidentUser: latestIncident.userId,
-              incidentId: latestIncident.incidentId,
-              action: 'Verified',
-              previousStatus: latestIncident.data.rdInc_status || 'Pending',
-              moderatorUid: 'system-auto-verify',
-              moderatorEmail: 'system@auto-verify',
-              at: now,
-              reason: `Auto-verified: ${selectedMember.hasPicture ? 'latest with picture' : 'latest'} of ${clusterMembers.length} reports in proximity cluster (200m). Cluster now locked.`
-            }).catch(() => null); // logging is best-effort
-          })
-          .catch(err => console.warn(`Failed to auto-verify ${latestIncident.userId}/${latestIncident.incidentId}:`, err))
-      );
+        updates.push(
+          db.ref(`incidents/${incident.userId}/${incident.incidentId}`).update(updateData)
+            .then(() => {
+              autoVerifiedCount++;
+              console.log(`[autoVerifyClusteredIncidents] Auto-verified: ${incident.userId}/${incident.incidentId}`);
+              // Log auto-verification (best-effort)
+              return db.ref('moderation_logs').push({
+                incidentUser: incident.userId,
+                incidentId: incident.incidentId,
+                action: 'Verified',
+                previousStatus: incident.data.rdInc_status || 'Pending',
+                moderatorUid: 'system-auto-verify',
+                moderatorEmail: 'system@auto-verify',
+                at: now,
+                reason: `Auto-verified: ${selectedMember.hasPicture ? 'report with picture' : 'latest'} of ${clusterMembers.length} reports in proximity cluster (200m). Cluster now locked.`
+              }).catch(() => null); // logging is best-effort
+            })
+            .catch(err => console.warn(`Failed to auto-verify ${incident.userId}/${incident.incidentId}:`, err))
+        );
+      }
     }
 
     if (updates.length > 0) await Promise.all(updates);
+    console.log(`[autoVerifyClusteredIncidents] Auto-verified ${autoVerifiedCount} reports total`);
     return { autoVerified: autoVerifiedCount, clustersFound: clusters.length };
   } catch (e) {
     console.error('autoVerifyClusteredIncidents error:', e);
@@ -520,17 +639,17 @@ exports.autoVerifyClusteredIncidents = onSchedule({ schedule: 'every 5 minutes',
   }
 });
 
-// Automatically purge incident reports marked as deleted after 2 hours
+// Automatically archive incident reports marked as deleted after 2 hours
 exports.purgeDeletedIncidents = onSchedule({ schedule: 'every 1 minutes', timeZone: 'Asia/Manila' }, async () => {
   try {
     const now = Date.now();
     const TWO_HOURS_MS = 2 * 60 * 60 * 1000; // 2 hours in milliseconds
-    let purgedCount = 0;
+    let archivedCount = 0;
 
     // Scan all incidents
     const incidentsSnapshot = await rtdb.ref('incidents').get();
     if (!incidentsSnapshot.exists()) {
-      return { purged: 0 };
+      return { archived: 0 };
     }
 
     const allIncidents = incidentsSnapshot.val();
@@ -549,14 +668,17 @@ exports.purgeDeletedIncidents = onSchedule({ schedule: 'every 1 minutes', timeZo
         if (incident.rdInc_status === 'deleted' && incident.deletedAt) {
           const deletedAt = normalizeTimestamp(incident.deletedAt);
           if (deletedAt && (now - deletedAt) >= TWO_HOURS_MS) {
-            // Purge this incident
+            // Archive this incident instead of deleting
+            const archiveRef = rtdb.ref(`archived_incidents/${userId}/${incidentId}`);
+            const incidentRef = rtdb.ref(`incidents/${userId}/${incidentId}`);
             updates.push(
-              rtdb.ref(`incidents/${userId}/${incidentId}`).remove()
+              archiveRef.set({ ...incident, archivedAt: now, archivedReason: 'User deleted' })
+                .then(() => incidentRef.remove())
                 .then(() => {
-                  purgedCount++;
-                  console.log(`Purged deleted incident: ${userId}/${incidentId}`);
+                  archivedCount++;
+                  console.log(`Archived deleted incident: ${userId}/${incidentId}`);
                 })
-                .catch(err => console.warn(`Failed to purge ${userId}/${incidentId}:`, err))
+                .catch(err => console.warn(`Failed to archive ${userId}/${incidentId}:`, err))
             );
           }
         }
@@ -564,24 +686,25 @@ exports.purgeDeletedIncidents = onSchedule({ schedule: 'every 1 minutes', timeZo
     });
 
     if (updates.length > 0) await Promise.all(updates);
-    return { purged: purgedCount };
+    return { archived: archivedCount };
   } catch (e) {
     console.error('purgeDeletedIncidents error:', e);
-    return { purged: 0, error: e.message };
+    return { archived: 0, error: e.message };
   }
 });
 
-// One-time cleanup: Remove all incidents with status='deleted' (legacy from old deletion method)
+// Archive incidents with status='deleted' (instead of permanent deletion)
 exports.cleanupOldDeletedIncidents = onSchedule({ schedule: 'every 1 minutes', timeZone: 'Asia/Manila' }, async () => {
   try {
     const incidentsSnapshot = await rtdb.ref('incidents').get();
     if (!incidentsSnapshot.exists()) {
-      return { cleaned: 0 };
+      return { archived: 0 };
     }
 
     const allIncidents = incidentsSnapshot.val();
     const updates = [];
-    let cleanedCount = 0;
+    let archivedCount = 0;
+    const now = Date.now();
 
     // Iterate through all users and their incidents
     Object.keys(allIncidents).forEach(userId => {
@@ -592,24 +715,27 @@ exports.cleanupOldDeletedIncidents = onSchedule({ schedule: 'every 1 minutes', t
         const incident = userIncidents[incidentId];
         if (!incident || typeof incident !== 'object') return;
 
-        // Remove any incident with status='deleted' (old deletion method)
+        // Archive any incident with status='deleted' instead of removing permanently
         if (incident.rdInc_status === 'deleted') {
+          const archiveRef = rtdb.ref(`archived_incidents/${userId}/${incidentId}`);
+          const incidentRef = rtdb.ref(`incidents/${userId}/${incidentId}`);
           updates.push(
-            rtdb.ref(`incidents/${userId}/${incidentId}`).remove()
+            archiveRef.set({ ...incident, archivedAt: now, archivedReason: 'Status was deleted' })
+              .then(() => incidentRef.remove())
               .then(() => {
-                cleanedCount++;
-                console.log(`Cleaned up deleted incident: ${userId}/${incidentId}`);
+                archivedCount++;
+                console.log(`Archived deleted incident: ${userId}/${incidentId}`);
               })
-              .catch(err => console.warn(`Failed to clean ${userId}/${incidentId}:`, err))
+              .catch(err => console.warn(`Failed to archive ${userId}/${incidentId}:`, err))
           );
         }
       });
     });
 
     if (updates.length > 0) await Promise.all(updates);
-    return { cleaned: cleanedCount };
+    return { archived: archivedCount };
   } catch (e) {
     console.error('cleanupOldDeletedIncidents error:', e);
-    return { cleaned: 0, error: e.message };
+    return { archived: 0, error: e.message };
   }
 });
