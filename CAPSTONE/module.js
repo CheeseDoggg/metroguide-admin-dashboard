@@ -1724,20 +1724,16 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebas
 
     // Delete history/incident report
     function deleteHistoryReport(userId, incidentId) {
-      if (!confirm('Delete this report? It will disappear from the mobile app but remain in the History tab as "deleted".')) {
+      if (!confirm('Are you sure you want to delete this report? It will disappear from the mobile app but remain in History with "deleted" status.')) {
         return;
       }
-      try {
-        const moderateIncident = httpsCallable(functions, 'moderateIncident');
-        moderateIncident({ userId, incidentId, status: 'deleted' })
-          .then(() => {
-            alert('Report marked as deleted. It will disappear from the mobile app but remain in History.');
-            loadHistory(); // Refresh the table
-          })
-          .catch(err => alert('Error deleting report: ' + err.message));
-      } catch (err) {
-        alert('Error: ' + err.message);
-      }
+      const moderateIncident = httpsCallable(functions, 'moderateIncident');
+      moderateIncident({ userId, incidentId, status: 'deleted' })
+        .then(() => {
+          alert('Report deleted! It will disappear from the mobile app but remains in History.');
+          loadHistory(); // Refresh the table
+        })
+        .catch(err => alert('Error deleting report: ' + err.message));
     }
 
     document.getElementById("tabReports").addEventListener("click", () => {
