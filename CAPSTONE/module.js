@@ -1781,13 +1781,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebas
 
     // Delete history/incident report
     function deleteHistoryReport(userId, incidentId) {
-      if (!confirm('Mark this report as deleted? It will stay in History but disappear from the mobile app.')) {
+      if (!confirm('Are you sure you want to permanently delete this report? This will immediately remove it from the database and mobile app.')) {
         return;
       }
-      const moderateIncident = httpsCallable(functions, 'moderateIncident');
-      moderateIncident({ userId, incidentId, status: 'deleted' })
+      const refToDelete = ref(db, `incidents/${userId}/${incidentId}`);
+      remove(refToDelete)
         .then(() => {
-          alert('Report marked as deleted! It will stay in History but disappear from the mobile app.');
+          alert('Report permanently deleted! It will disappear from the mobile app immediately.');
           loadHistory(); // Refresh the table
         })
         .catch(err => alert('Error deleting report: ' + err.message));
