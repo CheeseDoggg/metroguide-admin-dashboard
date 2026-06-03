@@ -541,3 +541,46 @@ exports.purgeDeletedIncidents = onSchedule({ schedule: 'every 1 minutes', timeZo
     return { purged: 0, error: e.message };
   }
 });
+
+// One-time cleanup: Remove all incidents with status='deleted' (legacy from old deletion method)
+exports.cleanupOldDeletedIncidents = onSchedule({ schedule: 'every 1 minutes', timeZone: 'Asia/Manila' }, async () => {
+  try {
+    const incidentsSnapshot = await rtdb.ref('incidents').get();
+    if (!incidentsSnapshot.exists()) {
+      return { cleaned: 0 };
+    }
+
+    const allIncidents = incidentsSnapshot.val();
+    const updates = [];
+    let cleanedCount = 0;
+
+    // Iterate through all users and their incidents
+    Object.keys(allIncidents).forEach(userId => {
+      const userIncidents = allIncidents[userId];
+      if (!userIncidents || typeof userIncidents !== 'object') return;
+
+      Object.keys(userIncidents).forEach(incidentId => {
+        const incident = userIncidents[incidentId];
+        if (!incident || typeof incident !== 'object') return;
+
+        // Remove any incident with status='deleted' (old deletion method)
+        if (incident.rdInc_status === 'deleted') {
+          updates.push(
+            rtdb.ref(`incidents/${userId}/${incidentId}`).remove()
+              .then(() => {
+                cleanedCount++;
+                console.log(`Cleaned up deleted incident: ${userId}/${incidentId}`);
+              })
+              .catch(err => console.warn(`Failed to clean ${userId}/${incidentId}:`, err))
+          );
+        }
+      });
+    });
+
+    if (updates.length > 0) await Promise.all(updates);
+    return { cleaned: cleanedCount };
+  } catch (e) {
+    console.error('cleanupOldDeletedIncidents error:', e);
+    return { cleaned: 0, error: e.message };
+  }
+});
