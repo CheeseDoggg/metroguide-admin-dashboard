@@ -347,6 +347,11 @@ exports.autoVerifyClusteredIncidents = onSchedule({ schedule: 'every 5 minutes',
         const tsNum = normalizeTimestamp(data.timestamp) || normalizeTimestamp(data.createdAt) || now;
         const category = String(data.category || '').trim().toLowerCase();
         
+        // Debug: Log coordinates for first few incidents
+        if (totalIncidents <= 3) {
+          console.log(`[autoVerifyClusteredIncidents] Coords for ${incidentId}: lat=${lat}, lng=${lng}, category="${category}", hasLat=${Number.isFinite(lat)}, hasLng=${Number.isFinite(lng)}`);
+        }
+        
         // Must have coordinates and category
         if (Number.isFinite(lat) && Number.isFinite(lng) && category) {
           allIncidents.push({
