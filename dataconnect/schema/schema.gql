@@ -1,0 +1,50 @@
+type Station @table {
+  name: String!
+  latitude: Float!
+  longitude: Float!
+  createdAt: Timestamp!
+  description: String
+  address: String
+}
+
+type Route @table {
+  name: String!
+  color: String!
+  createdAt: Timestamp!
+  description: String
+  lineCode: String
+}
+
+type Train @table {
+  routeId: UUID!
+  currentStationId: UUID!
+  direction: String!
+  scheduledArrivalTime: Timestamp!
+  actualArrivalTime: Timestamp!
+  createdAt: Timestamp!
+  updatedAt: Timestamp!
+  status: String
+  capacity: Int
+}
+
+type Stop @table(key: ["station", "route"]) {
+  station: Station!
+  route: Route!
+  order: Int!
+  createdAt: Timestamp!
+  estimatedTravelTimeFromPrevious: Int
+}
+
+type User @table {
+  displayName: String!
+  createdAt: Timestamp!
+  email: String
+  photoUrl: String
+}
+
+type SavedItem @table {
+  user: User!
+  itemId: UUID!
+  itemType: String!
+  createdAt: Timestamp!
+}

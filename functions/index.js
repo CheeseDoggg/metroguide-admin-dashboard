@@ -639,17 +639,17 @@ exports.autoVerifyClusteredIncidents = onSchedule({ schedule: 'every 5 minutes',
   }
 });
 
-// Automatically archive incident reports marked as deleted after 2 hours
+// Automatically purge incident reports marked as deleted after 2 hours
 exports.purgeDeletedIncidents = onSchedule({ schedule: 'every 1 minutes', timeZone: 'Asia/Manila' }, async () => {
   try {
     const now = Date.now();
     const TWO_HOURS_MS = 2 * 60 * 60 * 1000; // 2 hours in milliseconds
-    let archivedCount = 0;
+    let purgedCount = 0;
 
     // Scan all incidents
     const incidentsSnapshot = await rtdb.ref('incidents').get();
     if (!incidentsSnapshot.exists()) {
-      return { archived: 0 };
+      return { purged: 0 };
     }
 
     const allIncidents = incidentsSnapshot.val();
@@ -668,17 +668,14 @@ exports.purgeDeletedIncidents = onSchedule({ schedule: 'every 1 minutes', timeZo
         if (incident.rdInc_status === 'deleted' && incident.deletedAt) {
           const deletedAt = normalizeTimestamp(incident.deletedAt);
           if (deletedAt && (now - deletedAt) >= TWO_HOURS_MS) {
-            // Archive this incident instead of deleting
-            const archiveRef = rtdb.ref(`archived_incidents/${userId}/${incidentId}`);
-            const incidentRef = rtdb.ref(`incidents/${userId}/${incidentId}`);
+            // Purge this incident
             updates.push(
-              archiveRef.set({ ...incident, archivedAt: now, archivedReason: 'User deleted' })
-                .then(() => incidentRef.remove())
+              rtdb.ref(`incidents/${userId}/${incidentId}`).remove()
                 .then(() => {
-                  archivedCount++;
-                  console.log(`Archived deleted incident: ${userId}/${incidentId}`);
+                  purgedCount++;
+                  console.log(`Purged deleted incident: ${userId}/${incidentId}`);
                 })
-                .catch(err => console.warn(`Failed to archive ${userId}/${incidentId}:`, err))
+                .catch(err => console.warn(`Failed to purge ${userId}/${incidentId}:`, err))
             );
           }
         }
@@ -686,25 +683,24 @@ exports.purgeDeletedIncidents = onSchedule({ schedule: 'every 1 minutes', timeZo
     });
 
     if (updates.length > 0) await Promise.all(updates);
-    return { archived: archivedCount };
+    return { purged: purgedCount };
   } catch (e) {
     console.error('purgeDeletedIncidents error:', e);
-    return { archived: 0, error: e.message };
+    return { purged: 0, error: e.message };
   }
 });
 
-// Archive incidents with status='deleted' (instead of permanent deletion)
+// One-time cleanup: Remove all incidents with status='deleted' (legacy from old deletion method)
 exports.cleanupOldDeletedIncidents = onSchedule({ schedule: 'every 1 minutes', timeZone: 'Asia/Manila' }, async () => {
   try {
     const incidentsSnapshot = await rtdb.ref('incidents').get();
     if (!incidentsSnapshot.exists()) {
-      return { archived: 0 };
+      return { cleaned: 0 };
     }
 
     const allIncidents = incidentsSnapshot.val();
     const updates = [];
-    let archivedCount = 0;
-    const now = Date.now();
+    let cleanedCount = 0;
 
     // Iterate through all users and their incidents
     Object.keys(allIncidents).forEach(userId => {
@@ -715,27 +711,24 @@ exports.cleanupOldDeletedIncidents = onSchedule({ schedule: 'every 1 minutes', t
         const incident = userIncidents[incidentId];
         if (!incident || typeof incident !== 'object') return;
 
-        // Archive any incident with status='deleted' instead of removing permanently
+        // Remove any incident with status='deleted' (old deletion method)
         if (incident.rdInc_status === 'deleted') {
-          const archiveRef = rtdb.ref(`archived_incidents/${userId}/${incidentId}`);
-          const incidentRef = rtdb.ref(`incidents/${userId}/${incidentId}`);
           updates.push(
-            archiveRef.set({ ...incident, archivedAt: now, archivedReason: 'Status was deleted' })
-              .then(() => incidentRef.remove())
+            rtdb.ref(`incidents/${userId}/${incidentId}`).remove()
               .then(() => {
-                archivedCount++;
-                console.log(`Archived deleted incident: ${userId}/${incidentId}`);
+                cleanedCount++;
+                console.log(`Cleaned up deleted incident: ${userId}/${incidentId}`);
               })
-              .catch(err => console.warn(`Failed to archive ${userId}/${incidentId}:`, err))
+              .catch(err => console.warn(`Failed to clean ${userId}/${incidentId}:`, err))
           );
         }
       });
     });
 
     if (updates.length > 0) await Promise.all(updates);
-    return { archived: archivedCount };
+    return { cleaned: cleanedCount };
   } catch (e) {
     console.error('cleanupOldDeletedIncidents error:', e);
-    return { archived: 0, error: e.message };
+    return { cleaned: 0, error: e.message };
   }
 });

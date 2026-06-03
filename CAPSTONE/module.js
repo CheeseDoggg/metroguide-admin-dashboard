@@ -695,126 +695,69 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebas
       if (historyRefCurrent) {
         try { off(historyRefCurrent); } catch (_) {}
       }
-      
-      // Load from both 'incidents' and 'archived_incidents' to show deleted reports
-      const historyTable = document.getElementById('historyTable');
-      historyTable.innerHTML = `
-        <tr>
-          <th>Location</th>
-          <th>Description</th>
-          <th>Category</th>
-          <th>Email</th>
-          <th>Username</th>
-          <th>Timestamp</th>
-          <th>Status</th>
-          <th>Image</th>
-          <th>Actions</th>
-        </tr>`;
-
-      // Load from active incidents first
       historyRefCurrent = ref(db, 'incidents');
       onValue(historyRefCurrent, (snapshot) => {
-        const historyReports = [];
-
-        // Collect from active incidents (Verified, Rejected, Deleted)
-        if (snapshot.exists()) {
-          snapshot.forEach((userSnap) => {
-            const userId = userSnap.key;
-            userSnap.forEach((incidentSnap) => {
-              const data = incidentSnap.val() || {};
-              const incidentId = incidentSnap.key;
-              const status = String(data.rdInc_status || '').toLowerCase();
-              if (status === 'verified' || status === 'rejected' || status === 'deleted') {
-                const tsNum = pickTimestamp(data);
-                historyReports.push({ userId, incidentId, data, tsNum, isArchived: false });
-              }
-            });
-          });
+        const historyTable = document.getElementById('historyTable');
+        // Header
+        historyTable.innerHTML = `
+          <tr>
+            <th>Location</th>
+            <th>Description</th>
+            <th>Category</th>
+            <th>Email</th>
+            <th>Username</th>
+            <th>Timestamp</th>
+            <th>Status</th>
+            <th>Image</th>
+            <th>Actions</th>
+          </tr>`;
+        if (!snapshot.exists()) {
+          historyTable.innerHTML += "<tr><td colspan='9'>No verified reports found.</td></tr>";
+          return;
         }
 
-        // Also load from archived incidents (deleted reports)
-        get(ref(db, 'archived_incidents')).then((archivedSnap) => {
-          if (archivedSnap.exists()) {
-            archivedSnap.forEach((userSnap) => {
-              const userId = userSnap.key;
-              userSnap.forEach((incidentSnap) => {
-                const data = incidentSnap.val() || {};
-                const incidentId = incidentSnap.key;
-                const tsNum = pickTimestamp(data);
-                // Mark archived reports as 'deleted' in display (but note they're from archive)
-                historyReports.push({ 
-                  userId, 
-                  incidentId, 
-                  data: { ...data, rdInc_status: 'deleted' }, 
-                  tsNum, 
-                  isArchived: true 
-                });
-              });
-            });
-          }
-
-          // Sort by timestamp
-          historyReports.sort((a, b) => {
-            const at = Number.isFinite(a.tsNum) ? a.tsNum : -Infinity;
-            const bt = Number.isFinite(b.tsNum) ? b.tsNum : -Infinity;
-            return bt - at; // newest first
+        // Collect nested incidents and filter Verified, Rejected, and Deleted
+        const historyReports = [];
+        snapshot.forEach((userSnap) => {
+          const userId = userSnap.key;
+          userSnap.forEach((incidentSnap) => {
+            const data = incidentSnap.val() || {};
+            const incidentId = incidentSnap.key;
+            const status = String(data.rdInc_status || '').toLowerCase();
+            if (status === 'verified' || status === 'rejected' || status === 'deleted') {
+              const tsNum = pickTimestamp(data);
+              historyReports.push({ userId, incidentId, data, tsNum });
+            }
           });
-
-          if (historyReports.length === 0) {
-            historyTable.innerHTML += "<tr><td colspan='9'>No history reports found.</td></tr>";
-            return;
-          }
-
-          // keep a global copy for export
-          window.__historyExportRaw = historyReports.map(h => ({
-            location: h.data.address || 'Unknown',
-            description: h.data.description || 'No description',
-            category: h.data.category || 'N/A',
-            email: h.data.email || 'N/A',
-            username: h.data.username || 'N/A',
-            status: h.data.rdInc_status || 'Unknown',
-            tsNum: h.tsNum,
-            image: h.data.imagefile || null,
-            timestamp: (Number.isFinite(h.tsNum)
-              ? new Date(h.tsNum).toLocaleString()
-              : (h.data.timestamp ? (isNaN(new Date(h.data.timestamp).getTime()) ? 'N/A' : new Date(h.data.timestamp).toLocaleString()) : 'N/A')),
-            userId: h.userId,
-            incidentId: h.incidentId,
-            isArchived: h.isArchived
-          }));
-
-          renderHistoryTable();
-        }).catch(err => {
-          console.warn('Error loading archived incidents:', err);
-          // Still render even if archive fails
-          historyReports.sort((a, b) => {
-            const at = Number.isFinite(a.tsNum) ? a.tsNum : -Infinity;
-            const bt = Number.isFinite(b.tsNum) ? b.tsNum : -Infinity;
-            return bt - at;
-          });
-          if (historyReports.length === 0) {
-            historyTable.innerHTML += "<tr><td colspan='9'>No history reports found.</td></tr>";
-            return;
-          }
-          window.__historyExportRaw = historyReports.map(h => ({
-            location: h.data.address || 'Unknown',
-            description: h.data.description || 'No description',
-            category: h.data.category || 'N/A',
-            email: h.data.email || 'N/A',
-            username: h.data.username || 'N/A',
-            status: h.data.rdInc_status || 'Unknown',
-            tsNum: h.tsNum,
-            image: h.data.imagefile || null,
-            timestamp: (Number.isFinite(h.tsNum)
-              ? new Date(h.tsNum).toLocaleString()
-              : (h.data.timestamp ? (isNaN(new Date(h.data.timestamp).getTime()) ? 'N/A' : new Date(h.data.timestamp).toLocaleString()) : 'N/A')),
-            userId: h.userId,
-            incidentId: h.incidentId,
-            isArchived: h.isArchived
-          }));
-          renderHistoryTable();
         });
-      });
+
+        if (historyReports.length === 0) {
+          historyTable.innerHTML += "<tr><td colspan='9'>No verified or rejected reports found.</td></tr>";
+          return;
+        }
+
+        historyReports.sort((a, b) => {
+          const at = Number.isFinite(a.tsNum) ? a.tsNum : -Infinity;
+          const bt = Number.isFinite(b.tsNum) ? b.tsNum : -Infinity;
+          return bt - at; // newest first
+        });
+
+        // keep a global copy for export
+        window.__historyExportRaw = historyReports.map(h => ({
+          location: h.data.address || 'Unknown',
+          description: h.data.description || 'No description',
+          category: h.data.category || 'N/A',
+          email: h.data.email || 'N/A',
+          username: h.data.username || 'N/A',
+          status: h.data.rdInc_status || 'Unknown',
+          tsNum: h.tsNum,
+          image: h.data.imagefile || null,
+          timestamp: (Number.isFinite(h.tsNum)
+            ? new Date(h.tsNum).toLocaleString()
+            : (h.data.timestamp ? (isNaN(new Date(h.data.timestamp).getTime()) ? 'N/A' : new Date(h.data.timestamp).toLocaleString()) : 'N/A')),
+          userId: h.userId,
+          incidentId: h.incidentId
+        }));
 
         // Render with current UI filters instead of raw list
         renderHistoryTable();
