@@ -555,6 +555,18 @@ exports.autoVerifyClusteredIncidents = onSchedule({ schedule: 'every 5 minutes',
     const updates = [];
 
     for (const clusterMembers of clusters) {
+      // Check if ANY incident in this cluster is already marked as locked
+      const clusterIsLocked = clusterMembers.some(idx => {
+        const incident = pendingIncidents[idx];
+        return incident.data.clusterLocked === true;
+      });
+      
+      if (clusterIsLocked) {
+        const seedIncident = pendingIncidents[clusterMembers[0]];
+        console.log(`[autoVerifyClusteredIncidents] Skipping cluster (${seedIncident.lat.toFixed(6)}, ${seedIncident.lng.toFixed(6)}, ${seedIncident.category}): already locked`);
+        continue;
+      }
+      
       // Get all members with their picture status
       const membersWithStatus = clusterMembers.map(idx => ({
         idx,
@@ -582,15 +594,6 @@ exports.autoVerifyClusteredIncidents = onSchedule({ schedule: 'every 5 minutes',
         // If no pictures, verify only the latest one
         selectedMembers = [withoutPictures[0]];
         console.log(`[autoVerifyClusteredIncidents] Cluster without pictures: selecting 1 report (latest)`);
-      }
-      
-      // Check if this cluster already has a verified incident
-      const latestIncident = selectedMembers[0]?.incident || pendingIncidents[clusterMembers[0]];
-      const clusterKey = `${latestIncident.lat.toFixed(6)}_${latestIncident.lng.toFixed(6)}_${latestIncident.category}`;
-      if (verifiedIncidents.has(clusterKey)) {
-        // Cluster already locked; do not verify new reports
-        console.log(`[autoVerifyClusteredIncidents] Skipping cluster ${clusterKey}: already has 1 verified incident`);
-        continue;
       }
       
       // Verify selected reports in this cluster
