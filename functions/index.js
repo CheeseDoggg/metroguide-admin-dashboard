@@ -189,14 +189,21 @@ exports.moderateIncident = onCall(async (req) => {
       if (prevSnap.exists()) prev = prevSnap.val() || {};
     } catch (_) { /* ignore */ }
 
-    await db.ref(refPath).update({
+    const updateData = {
       rdInc_status: String(status),
       moderatedBy: callerUid,
       moderatedAt: now,
       // legacy compatibility
       verifiedBy: callerUid,
       verifiedAt: now,
-    });
+    };
+
+    // Add deletedAt timestamp when marking as deleted
+    if (String(status).toLowerCase() === 'deleted') {
+      updateData.deletedAt = now;
+    }
+
+    await db.ref(refPath).update(updateData);
 
     // Write moderation log (best-effort)
     try {
