@@ -318,11 +318,16 @@ exports.autoVerifyClusteredIncidents = onSchedule({ schedule: 'every 5 minutes',
   
   try {
     const rootSnap = await db.ref('incidents').get();
-    if (!rootSnap.exists()) return { autoVerified: 0 };
+    if (!rootSnap.exists()) {
+      console.log('[autoVerifyClusteredIncidents] No incidents found');
+      return { autoVerified: 0 };
+    }
 
     // Collect all incidents with valid coordinates (including verified ones to identify locked clusters)
     const allIncidents = [];
     const verifiedIncidents = new Set(); // track which clusters are already verified
+    let totalIncidents = 0;
+    let skippedIncidents = 0;
     
     rootSnap.forEach((userSnap) => {
       const userId = userSnap.key;
@@ -330,6 +335,12 @@ exports.autoVerifyClusteredIncidents = onSchedule({ schedule: 'every 5 minutes',
         const incidentId = incSnap.key;
         const data = incSnap.val() || {};
         const status = String(data.rdInc_status || '').toLowerCase();
+        totalIncidents++;
+        
+        // Debug: Log first few incidents
+        if (totalIncidents <= 3) {
+          console.log(`[autoVerifyClusteredIncidents] Incident ${incidentId}: status="${status}", rdInc_status="${data.rdInc_status}"`);
+        }
         
         const lat = extractLat(data);
         const lng = extractLng(data);
@@ -363,7 +374,10 @@ exports.autoVerifyClusteredIncidents = onSchedule({ schedule: 'every 5 minutes',
       return status !== 'verified' && status !== 'rejected' && status !== 'deleted';
     });
 
+    console.log(`[autoVerifyClusteredIncidents] Total incidents: ${totalIncidents}, Pending: ${pendingIncidents.length}, Min required: ${MIN_REPORTS_FOR_AUTO_VERIFY}`);
+
     if (pendingIncidents.length < MIN_REPORTS_FOR_AUTO_VERIFY) {
+      console.log(`[autoVerifyClusteredIncidents] Not enough pending incidents (${pendingIncidents.length} < ${MIN_REPORTS_FOR_AUTO_VERIFY})`);
       return { autoVerified: 0, pendingCount: pendingIncidents.length };
     }
 
@@ -400,10 +414,13 @@ exports.autoVerifyClusteredIncidents = onSchedule({ schedule: 'every 5 minutes',
         const clusterMembers = [i, ...neighbors];
         clusters.push(clusterMembers);
         clusterMembers.forEach(idx => visited.add(idx));
+        console.log(`[autoVerifyClusteredIncidents] Found cluster with ${clusterMembers.length} reports, category: ${seed.category}`);
       } else {
         visited.add(i);
       }
     }
+
+    console.log(`[autoVerifyClusteredIncidents] Total clusters found: ${clusters.length}`);
 
     // Auto-verify only the latest report in each cluster
     // BUT: Skip clusters that already have a verified incident (cluster is locked)
