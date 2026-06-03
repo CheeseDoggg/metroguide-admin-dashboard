@@ -804,9 +804,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebas
         return;
       }
       filtered.sort((a,b)=>(Number.isFinite(b.tsNum)?b.tsNum:-Infinity)-(Number.isFinite(a.tsNum)?a.tsNum:-Infinity));
+      // In history view, include all incidents (including deleted)
       filtered.forEach((r, idx) => {
         const color = r.status.toLowerCase() === 'verified' ? '#4caf50' : (r.status.toLowerCase() === 'deleted' ? '#999999' : '#f44336');
-        const imgHtml = buildImageCell(r.image, `history/${r.username}/${r.tsNum||''}`);
+        const badgeText = r.status.toLowerCase() === 'deleted' ? ' (Archived)' : '';
+        const imgHtml = buildImageCell(r.image, `history/${r.username}/${r.tsNum||''}`);  
         const tr = document.createElement('tr');
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'btn btn-reject';
@@ -826,7 +828,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebas
           <td>${r.email}</td>
           <td>${r.username}</td>
           <td>${r.timestamp}</td>
-          <td style="color:${color};font-weight:bold;">${r.status}</td>
+          <td style="color:${color};font-weight:bold;">${r.status}${badgeText}</td>
           <td>${imgHtml}</td>
           <td></td>`;
         tr.cells[8].appendChild(deleteBtn);
@@ -1724,13 +1726,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebas
 
     // Delete history/incident report
     function deleteHistoryReport(userId, incidentId) {
-      if (!confirm('Are you sure you want to permanently delete this report? This will immediately remove it from the database and mobile app.')) {
+      if (!confirm('Are you sure you want to delete this report? It will disappear from the mobile app but remain in the history tab.')) {
         return;
       }
-      const refToDelete = ref(db, `incidents/${userId}/${incidentId}`);
-      remove(refToDelete)
-        .then(() => {
-          alert('Report permanently deleted! It will disappear from the mobile app immediately.');
+      const moderateIncident = httpsCallable(functions, 'moderateIncident');
+      moderateIncident({ userId, incidentId, status: 'deleted' })
+        .then(result => {
+          alert('Report deleted! It has been moved to the archive.');
           loadHistory(); // Refresh the table
         })
         .catch(err => alert('Error deleting report: ' + err.message));
