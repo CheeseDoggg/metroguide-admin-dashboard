@@ -245,7 +245,7 @@ exports.expireVerifiedIncidents = onSchedule({ schedule: 'every 5 minutes', time
           || null;
         if (!basisTs) return; // no reliable timestamp; skip to avoid accidental deletions
 
-        if ((now - basisTs) >= THREE_HOURS_MS) {
+        if ((now - basisTs) >= TWO_HOURS_MS) {
           // Archive then remove
           const incidentRef = db.ref(`incidents/${userId}/${incidentId}`);
           const archiveRef = db.ref(`archived_incidents/${userId}/${incidentId}`);
