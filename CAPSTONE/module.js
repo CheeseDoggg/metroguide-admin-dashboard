@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
     import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
-  import { getDatabase, ref, onValue, update, get, off } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
+  import { getDatabase, ref, onValue, update, get, off, remove } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
   import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-functions.js";
 
     const firebaseConfig = {
@@ -1724,16 +1724,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebas
 
     // Delete history/incident report
     function deleteHistoryReport(userId, incidentId) {
-      if (!confirm('Are you sure you want to delete this report? This will also delete it from the mobile app (automatically purged in 2 hours).')) {
+      if (!confirm('Are you sure you want to permanently delete this report? This will immediately remove it from the database and mobile app.')) {
         return;
       }
       const refToDelete = ref(db, `incidents/${userId}/${incidentId}`);
-      update(refToDelete, { 
-        rdInc_status: 'deleted',
-        deletedAt: new Date().getTime()
-      })
+      remove(refToDelete)
         .then(() => {
-          alert('Report deleted successfully! (Will be automatically purged in 2 hours)');
+          alert('Report permanently deleted! It will disappear from the mobile app immediately.');
           loadHistory(); // Refresh the table
         })
         .catch(err => alert('Error deleting report: ' + err.message));
